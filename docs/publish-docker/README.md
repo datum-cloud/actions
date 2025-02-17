@@ -27,8 +27,8 @@ name: Publish Docker Image
 
 on:
   push:
-    branches:
-      - main
+  release:
+    types: ['published']
 
 jobs:
   publish:
