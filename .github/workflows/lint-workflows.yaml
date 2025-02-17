@@ -1,6 +1,8 @@
 name: Lint GitHub Actions Workflows
 
 on:
+  # Allow the workflow to be re-used in other repos.
+  workflow_call:
   push:
     paths:
       - ".github/workflows/*.yaml"
