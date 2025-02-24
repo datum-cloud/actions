@@ -1,0 +1,25 @@
+name: Lint GitHub Actions Workflows
+
+on:
+  # Allow the workflow to be re-used in other repos.
+  workflow_call:
+  push:
+    paths:
+      - ".github/workflows/*.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint Workflows
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Check workflow files
+        uses: docker://rhysd/actionlint:latest
+        with:
+          args: -color

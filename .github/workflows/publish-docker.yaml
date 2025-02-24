@@ -1,0 +1,55 @@
+name: Publish Docker Image
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        required: true
+        type: string
+        description: "The name of the image that should be used, excluding the repository (e.g. `cloud-portal`)"
+
+jobs:
+  build-and-push:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: 'google-github-actions/auth@v2'
+        with:
+          project_id: ${{ vars.GCP_ARTIFACT_REPOSITORY_PROJECT }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: Configure Docker to use Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ vars.GCP_ARTIFACT_REGISTRY_LOCATION }}-docker.pkg.dev
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ vars.GCP_ARTIFACT_REGISTRY }}/${{ inputs.image-name }}
+          tags: |
+            type=ref,event=pr
+            type=ref,event=branch
+            type=ref,event=branch,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}}
+            type=semver,pattern=v{{major}}
+            type=sha
+
+      - name: Build and Push Docker Image
+        id: push
+        uses: docker/build-push-action@v6.13.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
