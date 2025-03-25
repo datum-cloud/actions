@@ -50,10 +50,11 @@ jobs:
             type=sha
       - name: Publish Bundle
         run: |
-          echo "${{ steps.meta.outputs.tags }}" | while read -r tag; do
+          while IFS= read -r tag; do
+            tag_version="${tag#*:}"
             flux push artifact \
-              oci://${tag} \
-              --path bundle.yaml \
-              --source https://github.com/${{ github.repository }} \
-              --revision $(echo "$tag" | cut -d':' -f2)@sha1:$(git rev-parse HEAD)
-          done
+              "oci://${tag}" \
+              --path="bundle.yaml" \
+              --source="https://github.com/${GITHUB_REPOSITORY}" \
+              --revision="${tag_version}@sha1:$(git rev-parse HEAD)"
+          done < <(echo "${{ steps.meta.outputs.tags }}")
