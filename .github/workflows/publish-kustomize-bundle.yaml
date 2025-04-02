@@ -28,10 +28,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: azure/setup-kubectl@v4
-      - name: Build Kustomize Bundle
-        run: |
-          kubectl kustomize ${{ inputs.bundle-path }} > bundle.yaml
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@main
       - name: Extract metadata
@@ -54,7 +50,7 @@ jobs:
             tag_version="${tag#*:}"
             flux push artifact \
               "oci://${tag}" \
-              --path="bundle.yaml" \
+              --path="${{ inputs.bundle-path }}" \
               --source="https://github.com/${GITHUB_REPOSITORY}" \
               --revision="${tag_version}@sha1:$(git rev-parse HEAD)"
           done < <(echo "${{ steps.meta.outputs.tags }}")
