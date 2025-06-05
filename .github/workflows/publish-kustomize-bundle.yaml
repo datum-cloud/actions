@@ -11,6 +11,16 @@ on:
         required: true
         type: string
         description: "The path to the bundle that should be used, relative to the root of the repository (e.g. `config/crds`)"
+    outputs:
+      tags:
+        description: "Generated tags for the bundle"
+        value: ${{ jobs.publish-kustomize-bundle.outputs.tags }}
+      labels:
+        description: "Generated labels for the bundle"
+        value: ${{ jobs.publish-kustomize-bundle.outputs.labels }}
+      digest:
+        description: "Digest of the published bundle"
+        value: ${{ jobs.publish-kustomize-bundle.outputs.digest }}
 
 jobs:
   publish-kustomize-bundle:
@@ -19,6 +29,10 @@ jobs:
       contents: read
       packages: write
     runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
+      labels: ${{ steps.meta.outputs.labels }}
+      digest: ${{ steps.publish.outputs.digest }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,12 +59,23 @@ jobs:
             type=semver,pattern=v{{major}}
             type=sha
       - name: Publish Bundle
+        id: publish
         run: |
+          DIGEST=""
           while IFS= read -r tag; do
             tag_version="${tag#*:}"
-            flux push artifact \
+            echo "Publishing bundle to: oci://${tag}"
+            RESULT=$(flux push artifact \
               "oci://${tag}" \
               --path="${{ inputs.bundle-path }}" \
               --source="https://github.com/${GITHUB_REPOSITORY}" \
-              --revision="${tag_version}@sha1:$(git rev-parse HEAD)"
+              --revision="${tag_version}@sha1:$(git rev-parse HEAD)" \
+              --output=json)
+
+            # Extract digest from the first push (all pushes should have the same digest)
+            if [ -z "$DIGEST" ]; then
+              DIGEST=$(echo "$RESULT" | jq -r '.digest // empty')
+            fi
           done < <(echo "${{ steps.meta.outputs.tags }}")
+
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
