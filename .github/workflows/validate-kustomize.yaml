@@ -25,16 +25,18 @@ jobs:
       run: |
         echo "# Kustomize Validation Results"
         echo ""
-        echo "# Kustomize Validation Results" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+        {
+          echo "# Kustomize Validation Results"
+          echo ""
+        } >> "${GITHUB_STEP_SUMMARY}"
 
         # Find all kustomization.yaml files
         KUSTOMIZATION_DIRS=$(find . -name "kustomization.yaml" -exec dirname {} \;)
 
         # Check if any kustomization files were found
-        if [ -z "$KUSTOMIZATION_DIRS" ]; then
+        if [ -z "${KUSTOMIZATION_DIRS}" ]; then
           echo "ℹ️ No kustomization.yaml files found"
-          echo "### ℹ️ No kustomization.yaml files found" >> $GITHUB_STEP_SUMMARY
+          echo "### ℹ️ No kustomization.yaml files found" >> "${GITHUB_STEP_SUMMARY}"
           exit 0
         fi
 
@@ -42,29 +44,31 @@ jobs:
         HAS_ERRORS=0
 
         # Test each kustomization
-        for dir in $KUSTOMIZATION_DIRS; do
-          echo "🔍 Validating: $dir"
-          if ! OUTPUT=$(kustomize build "$dir" 2>&1); then
+        for dir in ${KUSTOMIZATION_DIRS}; do
+          echo "🔍 Validating: ${dir}"
+          if ! OUTPUT=$(kustomize build "${dir}" 2>&1); then
             echo ""
-            echo "❌ Error in '$dir':"
+            echo "❌ Error in '${dir}':"
             echo "----------------------------------------"
             echo "$OUTPUT"
             echo "----------------------------------------"
             echo ""
             
             # Also add to GitHub step summary
-            echo "### ❌ Error in \`$dir\`" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "$OUTPUT" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+            {
+              echo "### ❌ Error in \`${dir}\`"
+              echo "\`\`\`"
+              echo "${OUTPUT}"
+              echo "\`\`\`"
+              echo ""
+            } >> "${GITHUB_STEP_SUMMARY}"
             HAS_ERRORS=1
           else
-            echo "✅ $dir is valid"
+            echo "✅ ${dir} is valid"
           fi
         done
 
-        if [ "$HAS_ERRORS" -eq 1 ]; then
+        if [ "${HAS_ERRORS}" -eq 1 ]; then
           echo ""
           echo "🚨 One or more kustomizations failed validation."
           echo "::error::One or more Kustomize configurations failed validation"
@@ -72,5 +76,7 @@ jobs:
         else
           echo ""
           echo "🎉 All kustomizations are valid."
-          echo "### 🎉 All kustomizations are valid!" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "### 🎉 All kustomizations are valid!"
+          } >> "${GITHUB_STEP_SUMMARY}"
         fi
