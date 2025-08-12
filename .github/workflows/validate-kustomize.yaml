@@ -46,7 +46,7 @@ jobs:
         # Test each kustomization
         for dir in ${KUSTOMIZATION_DIRS}; do
           echo "🔍 Validating: ${dir}"
-          if ! OUTPUT=$(kustomize build "${dir}" 2>&1); then
+          if ! OUTPUT=$(kustomize build "${dir}" --enable-helm 2>&1); then
             echo ""
             echo "❌ Error in '${dir}':"
             echo "----------------------------------------"
