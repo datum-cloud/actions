@@ -42,6 +42,13 @@ jobs:
             type=semver,pattern=v{{major}}
             type=sha
 
+      - name: Extract version tag
+        id: version-tag  
+        run: |
+          FULL_TAG="${{ fromJSON(steps.meta.outputs.json).tags[1] }}"
+          VERSION_TAG="${FULL_TAG##*:}"
+          echo "tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
+
       - name: Build and Push Docker Image
         id: push
         uses: docker/build-push-action@v6.18.0
@@ -54,4 +61,4 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            VERSION=${{ steps.meta.outputs.version }}
+            VERSION=${{ steps.version-tag.outputs.tag }}
