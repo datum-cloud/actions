@@ -35,8 +35,8 @@ jobs:
           tags: |
             type=ref,event=pr
             type=ref,event=pr,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}}
-            type=ref,event=branch
             type=ref,event=branch,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}}
+            type=ref,event=branch
             type=semver,pattern=v{{version}}
             type=semver,pattern=v{{major}}.{{minor}}
             type=semver,pattern=v{{major}}
@@ -45,7 +45,7 @@ jobs:
       - name: Extract version tag
         id: version-tag  
         run: |
-          FULL_TAG="${{ fromJSON(steps.meta.outputs.json).tags[1] }}"
+          FULL_TAG="${{ fromJSON(steps.meta.outputs.json).tags[0] }}"
           VERSION_TAG="${FULL_TAG##*:}"
           echo "tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
 
