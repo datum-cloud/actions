@@ -7,6 +7,10 @@ on:
         required: true
         type: string
         description: "The name of the image that should be used, excluding the repository (e.g. `cloud-portal`)"
+      extra-build-args:
+        required: false
+        type: string
+        description: "Additional build arguments to pass to docker build (multiline string format)"
 
 jobs:
   build-and-push:
@@ -62,4 +66,8 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             VERSION=${{ steps.version-tag.outputs.tag }}
+            GIT_COMMIT=${{ github.sha }}
+            GIT_TREE_STATE=clean
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
             SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
+            ${{ inputs.extra-build-args }}
