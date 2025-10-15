@@ -104,7 +104,7 @@ jobs:
             if [ -f "${kustomize_path}/kustomization.yaml" ]; then
               echo "Setting image ${{ inputs.image-name }}:${TAG} in ${kustomize_path}"
               cd "${kustomize_path}"
-              kustomize edit set image ${{ inputs.image-name }}=${{ inputs.image-name }}:${TAG}
+              kustomize edit set image "${{ inputs.image-name }}=${{ inputs.image-name }}:${TAG}"
               cat kustomization.yaml
               cd - > /dev/null
             else
