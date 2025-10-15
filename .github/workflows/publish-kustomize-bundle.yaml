@@ -11,6 +11,16 @@ on:
         required: true
         type: string
         description: "The path to the bundle that should be used, relative to the root of the repository (e.g. `config/crds`)"
+      image-overlays:
+        required: false
+        type: string
+        description: "Comma-separated list of overlay paths where images should be set (e.g. 'config/base,config/apiserver,config/controller-manager')"
+        default: ""
+      image-name:
+        required: false
+        type: string
+        description: "The image name to set (e.g. 'ghcr.io/datum-cloud/datum-net')"
+        default: ""
     outputs:
       tags:
         description: "Generated tags for the bundle"
@@ -36,28 +46,63 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@main
+      
+      - name: Install Kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+      
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ inputs.bundle-name }}
           tags: |
-            type=ref,event=pr
-            type=ref,event=pr,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}}
-            type=ref,event=branch
-            type=ref,event=branch,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}}
+            type=ref,event=pr,prefix=v0.0.0-
+            type=ref,event=pr,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}},prefix=v0.0.0-
+            type=ref,event=branch,prefix=v0.0.0-
+            type=ref,event=branch,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}},prefix=v0.0.0-
             type=semver,pattern=v{{version}}
             type=semver,pattern=v{{major}}.{{minor}}
             type=semver,pattern=v{{major}}
-            type=sha
+            type=sha,prefix=v0.0.0-
+
+      - name: Set Image Tags in Kustomize Overlays
+        if: ${{ inputs.image-overlays != '' && inputs.image-name != '' }}
+        run: |
+          # Extract the first tag (usually the semver)
+          TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1 | cut -d':' -f2)
+          
+          echo "Will set image tag to: ${TAG}"
+          echo "Image name: ${{ inputs.image-name }}"
+          
+          # Split the comma-separated overlay paths
+          IFS=',' read -ra OVERLAYS <<< "${{ inputs.image-overlays }}"
+          
+          for overlay_path in "${OVERLAYS[@]}"; do
+            overlay_path=$(echo "$overlay_path" | xargs)  # Trim whitespace
+            
+            if [ -f "${overlay_path}/kustomization.yaml" ]; then
+              echo "Setting image ${{ inputs.image-name }}:${TAG} in ${overlay_path}"
+              cd "${overlay_path}"
+              kustomize edit set image "${{ inputs.image-name }}=${{ inputs.image-name }}:${TAG}"
+              cat kustomization.yaml
+              cd - > /dev/null
+            else
+              echo "Error: ${overlay_path}/kustomization.yaml not found"
+              exit 1
+            fi
+          done
 
       - name: Publish Bundle
         id: publish
