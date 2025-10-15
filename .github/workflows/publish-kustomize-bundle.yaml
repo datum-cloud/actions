@@ -11,6 +11,16 @@ on:
         required: true
         type: string
         description: "The path to the bundle that should be used, relative to the root of the repository (e.g. `config/crds`)"
+      image-overlays:
+        required: false
+        type: string
+        description: "Comma-separated list of overlay paths where images should be set (e.g. 'config/base,config/apiserver,config/controller-manager')"
+        default: ""
+      image-name:
+        required: false
+        type: string
+        description: "The image name to set (e.g. 'ghcr.io/datum-cloud/datum-net')"
+        default: ""
     outputs:
       tags:
         description: "Generated tags for the bundle"
@@ -36,14 +46,22 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@main
+      
+      - name: Install Kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+      
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -58,6 +76,41 @@ jobs:
             type=semver,pattern=v{{major}}.{{minor}}
             type=semver,pattern=v{{major}}
             type=sha
+
+      - name: Set Image Tags in Kustomize Overlays
+        if: ${{ inputs.image-overlays != '' && inputs.image-name != '' }}
+        run: |
+          # Extract the first tag (usually the semver)
+          TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1 | cut -d':' -f2)
+          
+          echo "Will set image tag to: ${TAG}"
+          echo "Image name: ${{ inputs.image-name }}"
+          
+          # Split the comma-separated overlay paths
+          IFS=',' read -ra OVERLAYS <<< "${{ inputs.image-overlays }}"
+          
+          for overlay_path in "${OVERLAYS[@]}"; do
+            overlay_path=$(echo "$overlay_path" | xargs)  # Trim whitespace
+            
+            # Determine the correct path for kustomization.yaml
+            # If the path has a base/ subdirectory, use that
+            # Otherwise, use the path directly
+            if [ -d "${overlay_path}/base" ]; then
+              kustomize_path="${overlay_path}/base"
+            else
+              kustomize_path="${overlay_path}"
+            fi
+            
+            if [ -f "${kustomize_path}/kustomization.yaml" ]; then
+              echo "Setting image ${{ inputs.image-name }}:${TAG} in ${kustomize_path}"
+              cd "${kustomize_path}"
+              kustomize edit set image ${{ inputs.image-name }}=${{ inputs.image-name }}:${TAG}
+              cat kustomization.yaml
+              cd - > /dev/null
+            else
+              echo "Warning: ${kustomize_path}/kustomization.yaml not found, skipping"
+            fi
+          done
 
       - name: Publish Bundle
         id: publish
