@@ -92,23 +92,15 @@ jobs:
           for overlay_path in "${OVERLAYS[@]}"; do
             overlay_path=$(echo "$overlay_path" | xargs)  # Trim whitespace
             
-            # Determine the correct path for kustomization.yaml
-            # If the path has a base/ subdirectory, use that
-            # Otherwise, use the path directly
-            if [ -d "${overlay_path}/base" ]; then
-              kustomize_path="${overlay_path}/base"
-            else
-              kustomize_path="${overlay_path}"
-            fi
-            
-            if [ -f "${kustomize_path}/kustomization.yaml" ]; then
-              echo "Setting image ${{ inputs.image-name }}:${TAG} in ${kustomize_path}"
-              cd "${kustomize_path}"
+            if [ -f "${overlay_path}/kustomization.yaml" ]; then
+              echo "Setting image ${{ inputs.image-name }}:${TAG} in ${overlay_path}"
+              cd "${overlay_path}"
               kustomize edit set image "${{ inputs.image-name }}=${{ inputs.image-name }}:${TAG}"
               cat kustomization.yaml
               cd - > /dev/null
             else
-              echo "Warning: ${kustomize_path}/kustomization.yaml not found, skipping"
+              echo "Error: ${overlay_path}/kustomization.yaml not found"
+              exit 1
             fi
           done
 
