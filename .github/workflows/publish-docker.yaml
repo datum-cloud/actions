@@ -11,10 +11,25 @@ on:
         required: false
         type: string
         description: "Additional build arguments to pass to docker build (multiline string format)"
+      target:
+        required: false
+        type: string
+        description: "Docker build target stage"
+        default: ""
+    outputs:
+      tag:
+        description: "The extracted version tag"
+        value: ${{ jobs.build-and-push.outputs.tag }}
+      build-version:
+        description: "The build version (semver compliant)"
+        value: ${{ jobs.build-and-push.outputs.build-version }}
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version-tag.outputs.tag }}
+      build-version: ${{ steps.version-tag.outputs.build_version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,14 +52,14 @@ jobs:
         with:
           images: ghcr.io/datum-cloud/${{ inputs.image-name }}
           tags: |
-            type=ref,event=pr
-            type=ref,event=pr,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}}
-            type=ref,event=branch,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}}
-            type=ref,event=branch
+            type=ref,event=pr,prefix=v0.0.0-
+            type=ref,event=pr,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}},prefix=v0.0.0-
+            type=ref,event=branch,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}},prefix=v0.0.0-
+            type=ref,event=branch,prefix=v0.0.0-
             type=semver,pattern=v{{version}}
             type=semver,pattern=v{{major}}.{{minor}}
             type=semver,pattern=v{{major}}
-            type=sha
+            type=sha,prefix=v0.0.0-
 
       - name: Extract version tag
         id: version-tag
@@ -74,6 +89,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
+          target: ${{ inputs.target }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
