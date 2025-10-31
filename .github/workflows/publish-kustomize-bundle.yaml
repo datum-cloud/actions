@@ -86,33 +86,23 @@ jobs:
           echo "Will set image tag to: ${TAG}"
           echo "Image name: ${{ inputs.image-name }}"
           
-          # Get the absolute path to the repository root
-          REPO_ROOT=$(pwd)
-          
           # Split the comma-separated overlay paths
           IFS=',' read -ra OVERLAYS <<< "${{ inputs.image-overlays }}"
           
           for overlay_path in "${OVERLAYS[@]}"; do
             overlay_path=$(echo "$overlay_path" | xargs)  # Trim whitespace
             
-            FULL_OVERLAY_PATH="${REPO_ROOT}/${overlay_path}"
-            
-            if [ -f "${FULL_OVERLAY_PATH}/kustomization.yaml" ]; then
+            if [ -f "${overlay_path}/kustomization.yaml" ]; then
               echo "Setting image ${{ inputs.image-name }}:${TAG} in ${overlay_path}"
-              cd "${FULL_OVERLAY_PATH}"
+              cd "${overlay_path}"
               kustomize edit set image "${{ inputs.image-name }}=${{ inputs.image-name }}:${TAG}"
-              echo "Updated kustomization.yaml:"
               cat kustomization.yaml
-              cd "${REPO_ROOT}"
+              cd - > /dev/null
             else
-              echo "Error: ${FULL_OVERLAY_PATH}/kustomization.yaml not found"
+              echo "Error: ${overlay_path}/kustomization.yaml not found"
               exit 1
             fi
           done
-          
-          # Verify the changes are in place
-          echo "Verifying bundle path contents:"
-          ls -la "${{ inputs.bundle-path }}"
 
       - name: Publish Bundle
         id: publish
@@ -121,9 +111,6 @@ jobs:
           while IFS= read -r tag; do
             tag_version="${tag#*:}"
             echo "Publishing bundle to: oci://${tag}"
-            echo "Bundle path contents:"
-            ls -laR "${{ inputs.bundle-path }}"
-            
             RESULT=$(flux push artifact \
               "oci://${tag}" \
               --path="${{ inputs.bundle-path }}" \
