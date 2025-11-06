@@ -40,6 +40,21 @@ on:
         value: ${{ jobs.snyk-scan.outputs.vulnerabilities-found }}
 
 jobs:
+
+  snyk-debug:
+    name: Debug Snyk Token
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Snyk
+        uses: snyk/actions/setup@master
+      
+      - name: Test Snyk Auth
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          snyk auth "$SNYK_TOKEN"
+          snyk config get org
+
   snyk-scan:
     runs-on: ubuntu-latest
     outputs:
