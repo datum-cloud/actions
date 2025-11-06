@@ -42,6 +42,12 @@ on:
         type: boolean
         default: false
         description: "Enable debug mode (-d flag) for verbose output"
+
+      upload-sarif:
+        required: false
+        type: boolean
+        default: false
+        description: "Whether to upload SARIF results to GitHub Security"
     
     outputs:
       vulnerabilities-found:
