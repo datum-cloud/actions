@@ -1,3 +1,5 @@
+# .github/workflows/snyk-scan.yaml
+
 name: Snyk Security Scan
 
 on:
@@ -24,7 +26,7 @@ on:
         required: false
         type: string
         default: "test"
-        description: "Snyk command to run (test|monitor|code)"
+        description: "Snyk command to run (test|monitor|iac test|container test)"
       
       args:
         required: false
@@ -76,22 +78,22 @@ jobs:
           echo "Running: $SNYK_CMD"
           
           # Run Snyk scan
-          eval $SNYK_CMD
+          eval "$SNYK_CMD"
           SNYK_EXIT_CODE=$?
           
           # Set output based on exit code
-          if [ $SNYK_EXIT_CODE -eq 0 ]; then
-            echo "vulnerabilities-found=false" >> $GITHUB_OUTPUT
+          if [ "$SNYK_EXIT_CODE" -eq 0 ]; then
+            echo "vulnerabilities-found=false" >> "$GITHUB_OUTPUT"
             echo "✅ No vulnerabilities found"
           else
-            echo "vulnerabilities-found=true" >> $GITHUB_OUTPUT
+            echo "vulnerabilities-found=true" >> "$GITHUB_OUTPUT"
             echo "⚠️ Vulnerabilities found"
           fi
           
           # Handle fail-on-issues flag
           if [ "${{ inputs.fail-on-issues }}" = "true" ]; then
             echo "fail-on-issues is enabled, preserving exit code"
-            exit $SNYK_EXIT_CODE
+            exit "$SNYK_EXIT_CODE"
           else
             echo "fail-on-issues is disabled, reporting only"
             exit 0
