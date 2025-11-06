@@ -70,17 +70,17 @@ jobs:
       - name: Run Snyk Security Scan
         id: snyk-scan
         env:
-          SNYK_TOKEN: ${{ secrets.SNYK_API_TOKEN }}
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           set +e  # Don't exit on error immediately
           
           # Verify token is set
-          if [ -z "$SNYK_API_TOKEN" ]; then
-            echo "❌ ERROR: SNYK_API_TOKEN is not set"
+          if [ -z "$SNYK_TOKEN" ]; then
+            echo "❌ ERROR: SNYK_TOKEN is not set"
             exit 1
           fi
           
-          echo "✅ SNYK_API_TOKEN is set (length: ${#SNYK_API_TOKEN})"
+          echo "✅ SNYK_TOKEN is set (length: ${#SNYK_TOKEN})"
           
           # Build the Snyk command
           SNYK_CMD="snyk ${{ inputs.command }}"
