@@ -1,0 +1,105 @@
+name: Snyk Security Scan
+
+on:
+  workflow_call:
+    inputs:
+      fail-on-issues:
+        required: false
+        type: boolean
+        default: true
+        description: "Whether to fail the build if vulnerabilities are found"
+      
+      severity-threshold:
+        required: false
+        type: string
+        default: "high"
+        description: "Minimum severity to fail on (low|medium|high|critical)"
+      
+      target-file:
+        required: false
+        type: string
+        description: "Specific file to scan (e.g., package.json, go.mod, pom.xml)"
+      
+      command:
+        required: false
+        type: string
+        default: "test"
+        description: "Snyk command to run (test|monitor|code)"
+      
+      args:
+        required: false
+        type: string
+        default: ""
+        description: "Additional arguments to pass to Snyk CLI"
+    
+    outputs:
+      vulnerabilities-found:
+        description: "Whether vulnerabilities were found (true/false)"
+        value: ${{ jobs.snyk-scan.outputs.vulnerabilities-found }}
+
+jobs:
+  snyk-scan:
+    runs-on: ubuntu-latest
+    outputs:
+      vulnerabilities-found: ${{ steps.snyk-scan.outputs.vulnerabilities-found }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Snyk
+        uses: snyk/actions/setup@master
+
+      - name: Run Snyk Security Scan
+        id: snyk-scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          set +e  # Don't exit on error immediately
+          
+          # Build the Snyk command
+          SNYK_CMD="snyk ${{ inputs.command }}"
+          
+          # Add severity threshold
+          SNYK_CMD="$SNYK_CMD --severity-threshold=${{ inputs.severity-threshold }}"
+          
+          # Add target file if specified
+          if [ -n "${{ inputs.target-file }}" ]; then
+            SNYK_CMD="$SNYK_CMD --file=${{ inputs.target-file }}"
+          fi
+          
+          # Add additional args if specified
+          if [ -n "${{ inputs.args }}" ]; then
+            SNYK_CMD="$SNYK_CMD ${{ inputs.args }}"
+          fi
+          
+          echo "Running: $SNYK_CMD"
+          
+          # Run Snyk scan
+          eval $SNYK_CMD
+          SNYK_EXIT_CODE=$?
+          
+          # Set output based on exit code
+          if [ $SNYK_EXIT_CODE -eq 0 ]; then
+            echo "vulnerabilities-found=false" >> $GITHUB_OUTPUT
+            echo "✅ No vulnerabilities found"
+          else
+            echo "vulnerabilities-found=true" >> $GITHUB_OUTPUT
+            echo "⚠️ Vulnerabilities found"
+          fi
+          
+          # Handle fail-on-issues flag
+          if [ "${{ inputs.fail-on-issues }}" = "true" ]; then
+            echo "fail-on-issues is enabled, preserving exit code"
+            exit $SNYK_EXIT_CODE
+          else
+            echo "fail-on-issues is disabled, reporting only"
+            exit 0
+          fi
+
+      - name: Upload Snyk results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: snyk.sarif
