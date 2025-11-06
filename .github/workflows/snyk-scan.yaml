@@ -1,5 +1,3 @@
-# .github/workflows/snyk-scan.yaml
-
 name: Snyk Security Scan
 
 on:
@@ -34,11 +32,16 @@ on:
         default: ""
         description: "Additional arguments to pass to Snyk CLI"
       
-      upload-sarif:
+      snyk-org:
+        required: false
+        type: string
+        description: "Snyk organization slug or ID"
+      
+      debug:
         required: false
         type: boolean
         default: false
-        description: "Whether to upload SARIF results to GitHub Security"
+        description: "Enable debug mode (-d flag) for verbose output"
     
     outputs:
       vulnerabilities-found:
@@ -46,21 +49,6 @@ on:
         value: ${{ jobs.snyk-scan.outputs.vulnerabilities-found }}
 
 jobs:
-
-  snyk-debug:
-    name: Debug Snyk Token
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup Snyk
-        uses: snyk/actions/setup@master
-      
-      - name: Test Snyk Auth
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: |
-          snyk auth "$SNYK_TOKEN"
-          snyk config get org
-
   snyk-scan:
     runs-on: ubuntu-latest
     outputs:
@@ -82,6 +70,17 @@ jobs:
           
           # Build the Snyk command
           SNYK_CMD="snyk ${{ inputs.command }}"
+          
+          # Add debug flag if enabled
+          if [ "${{ inputs.debug }}" = "true" ]; then
+            SNYK_CMD="$SNYK_CMD -d"
+            echo "🐛 Debug mode enabled"
+          fi
+          
+          # Add organization if specified
+          if [ -n "${{ inputs.snyk-org }}" ]; then
+            SNYK_CMD="$SNYK_CMD --org=${{ inputs.snyk-org }}"
+          fi
           
           # Add severity threshold
           SNYK_CMD="$SNYK_CMD --severity-threshold=${{ inputs.severity-threshold }}"
