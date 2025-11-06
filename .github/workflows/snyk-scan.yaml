@@ -49,11 +49,6 @@ on:
         default: false
         description: "Whether to upload SARIF results to GitHub Security"
     
-    secrets:
-      snyk-token:
-        required: true
-        description: "Snyk API token"
-    
     outputs:
       vulnerabilities-found:
         description: "Whether vulnerabilities were found (true/false)"
@@ -67,7 +62,7 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Snyk
         uses: snyk/actions/setup@master
@@ -75,17 +70,17 @@ jobs:
       - name: Run Snyk Security Scan
         id: snyk-scan
         env:
-          SNYK_TOKEN: ${{ secrets.snyk-token }}
+          SNYK_API_TOKEN: ${{ secrets.SNYK_API_TOKEN }}
         run: |
           set +e  # Don't exit on error immediately
           
           # Verify token is set
-          if [ -z "$SNYK_TOKEN" ]; then
-            echo "❌ ERROR: SNYK_TOKEN is not set"
+          if [ -z "$SNYK_API_TOKEN" ]; then
+            echo "❌ ERROR: SNYK_API_TOKEN is not set"
             exit 1
           fi
           
-          echo "✅ SNYK_TOKEN is set (length: ${#SNYK_TOKEN})"
+          echo "✅ SNYK_API_TOKEN is set (length: ${#SNYK_API_TOKEN})"
           
           # Build the Snyk command
           SNYK_CMD="snyk ${{ inputs.command }}"
