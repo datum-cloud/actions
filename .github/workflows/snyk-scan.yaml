@@ -70,7 +70,7 @@ jobs:
       - name: Run Snyk Security Scan
         id: snyk-scan
         env:
-          SNYK_API_TOKEN: ${{ secrets.SNYK_API_TOKEN }}
+          SNYK_TOKEN: ${{ secrets.SNYK_API_TOKEN }}
         run: |
           set +e  # Don't exit on error immediately
           
