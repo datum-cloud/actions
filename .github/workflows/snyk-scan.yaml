@@ -160,32 +160,34 @@ jobs:
       - name: Parse Snyk results and create summary
         if: always() && hashFiles(inputs.json-file-output) != ''
         run: |
-          echo "## 🔍 Snyk Security Scan Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔍 Snyk Security Scan Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
           
           if [ -f "${{ inputs.json-file-output }}" ]; then
             # Extract vulnerability counts by severity
-            CRITICAL=$(jq '[.vulnerabilities[]? | select(.severity=="critical")] | length' ${{ inputs.json-file-output }} 2>/dev/null || echo "0")
-            HIGH=$(jq '[.vulnerabilities[]? | select(.severity=="high")] | length' ${{ inputs.json-file-output }} 2>/dev/null || echo "0")
-            MEDIUM=$(jq '[.vulnerabilities[]? | select(.severity=="medium")] | length' ${{ inputs.json-file-output }} 2>/dev/null || echo "0")
-            LOW=$(jq '[.vulnerabilities[]? | select(.severity=="low")] | length' ${{ inputs.json-file-output }} 2>/dev/null || echo "0")
+            CRITICAL=$(jq '[.vulnerabilities[]? | select(.severity=="critical")] | length' "${{ inputs.json-file-output }}" 2>/dev/null || echo "0")
+            HIGH=$(jq '[.vulnerabilities[]? | select(.severity=="high")] | length' "${{ inputs.json-file-output }}" 2>/dev/null || echo "0")
+            MEDIUM=$(jq '[.vulnerabilities[]? | select(.severity=="medium")] | length' "${{ inputs.json-file-output }}" 2>/dev/null || echo "0")
+            LOW=$(jq '[.vulnerabilities[]? | select(.severity=="low")] | length' "${{ inputs.json-file-output }}" 2>/dev/null || echo "0")
             
-            echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
-            echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-            echo "| 🔴 Critical | $CRITICAL |" >> $GITHUB_STEP_SUMMARY
-            echo "| 🟠 High | $HIGH |" >> $GITHUB_STEP_SUMMARY
-            echo "| 🟡 Medium | $MEDIUM |" >> $GITHUB_STEP_SUMMARY
-            echo "| 🟢 Low | $LOW |" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+            {
+              echo "| Severity | Count |"
+              echo "|----------|-------|"
+              echo "| 🔴 Critical | $CRITICAL |"
+              echo "| 🟠 High | $HIGH |"
+              echo "| 🟡 Medium | $MEDIUM |"
+              echo "| 🟢 Low | $LOW |"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
             
             TOTAL=$((CRITICAL + HIGH + MEDIUM + LOW))
             if [ "$TOTAL" -gt 0 ]; then
-              echo "⚠️ **Total vulnerabilities found: $TOTAL**" >> $GITHUB_STEP_SUMMARY
+              echo "⚠️ **Total vulnerabilities found: $TOTAL**" >> "$GITHUB_STEP_SUMMARY"
             else
-              echo "✅ **No vulnerabilities found**" >> $GITHUB_STEP_SUMMARY
+              echo "✅ **No vulnerabilities found**" >> "$GITHUB_STEP_SUMMARY"
             fi
           else
-            echo "ℹ️ No JSON output file found" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ No JSON output file found" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload Snyk SARIF results to GitHub Security
