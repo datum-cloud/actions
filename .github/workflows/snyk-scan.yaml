@@ -46,8 +46,20 @@ on:
       upload-sarif:
         required: false
         type: boolean
-        default: false
+        default: true
         description: "Whether to upload SARIF results to GitHub Security"
+      
+      sarif-file-output:
+        required: false
+        type: string
+        default: "snyk.sarif"
+        description: "Path for SARIF output file"
+      
+      json-file-output:
+        required: false
+        type: string
+        default: "snyk.json"
+        description: "Path for JSON output file"
     
     outputs:
       vulnerabilities-found:
@@ -57,6 +69,10 @@ on:
 jobs:
   snyk-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     outputs:
       vulnerabilities-found: ${{ steps.snyk-scan.outputs.vulnerabilities-found }}
     
@@ -99,6 +115,14 @@ jobs:
           # Add severity threshold
           SNYK_CMD="$SNYK_CMD --severity-threshold=${{ inputs.severity-threshold }}"
           
+          # Add SARIF output if upload is enabled
+          if [ "${{ inputs.upload-sarif }}" = "true" ]; then
+            SNYK_CMD="$SNYK_CMD --sarif-file-output=${{ inputs.sarif-file-output }}"
+          fi
+          
+          # Add JSON output for detailed reporting
+          SNYK_CMD="$SNYK_CMD --json-file-output=${{ inputs.json-file-output }}"
+          
           # Add target file if specified
           if [ -n "${{ inputs.target-file }}" ]; then
             SNYK_CMD="$SNYK_CMD --file=${{ inputs.target-file }}"
@@ -133,8 +157,51 @@ jobs:
             exit 0
           fi
 
-      - name: Upload Snyk SARIF results
-        if: always() && inputs.upload-sarif == true && hashFiles('snyk.sarif') != ''
+      - name: Parse Snyk results and create summary
+        if: always() && hashFiles(inputs.json-file-output) != ''
+        run: |
+          echo "## 🔍 Snyk Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "${{ inputs.json-file-output }}" ]; then
+            # Extract vulnerability counts by severity
+            CRITICAL=$(jq '[.vulnerabilities[]? | select(.severity=="critical")] | length' ${{ inputs.json-file-output }} 2>/dev/null || echo "0")
+            HIGH=$(jq '[.vulnerabilities[]? | select(.severity=="high")] | length' ${{ inputs.json-file-output }} 2>/dev/null || echo "0")
+            MEDIUM=$(jq '[.vulnerabilities[]? | select(.severity=="medium")] | length' ${{ inputs.json-file-output }} 2>/dev/null || echo "0")
+            LOW=$(jq '[.vulnerabilities[]? | select(.severity=="low")] | length' ${{ inputs.json-file-output }} 2>/dev/null || echo "0")
+            
+            echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| 🔴 Critical | $CRITICAL |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟠 High | $HIGH |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟡 Medium | $MEDIUM |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟢 Low | $LOW |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            TOTAL=$((CRITICAL + HIGH + MEDIUM + LOW))
+            if [ "$TOTAL" -gt 0 ]; then
+              echo "⚠️ **Total vulnerabilities found: $TOTAL**" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "✅ **No vulnerabilities found**" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "ℹ️ No JSON output file found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload Snyk SARIF results to GitHub Security
+        if: always() && inputs.upload-sarif == true && hashFiles(inputs.sarif-file-output) != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: snyk.sarif
+          sarif_file: ${{ inputs.sarif-file-output }}
+          category: snyk-${{ inputs.command }}
+      
+      - name: Upload Snyk results as artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-results-${{ github.run_id }}
+          path: |
+            ${{ inputs.sarif-file-output }}
+            ${{ inputs.json-file-output }}
+          retention-days: 30
+          if-no-files-found: ignore
