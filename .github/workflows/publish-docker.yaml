@@ -16,6 +16,11 @@ on:
         type: string
         description: "Docker build target stage"
         default: ""
+      platforms:
+        required: false
+        type: string
+        description: "Comma separated list of target platforms for multi-arch builds"
+        default: "linux/amd64"
     outputs:
       tag:
         description: "The extracted version tag"
@@ -37,7 +42,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          platforms: linux/amd64
+          platforms: ${{ inputs.platforms }}
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
@@ -88,7 +93,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64
+          platforms: ${{ inputs.platforms }}
           target: ${{ inputs.target }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
