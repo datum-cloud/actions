@@ -55,7 +55,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Setup Flux CLI
-        uses: fluxcd/flux2/action@v2.7.2
+        uses: fluxcd/flux2/action@v2.7.5
       
       - name: Install Kustomize
         run: |
@@ -80,48 +80,80 @@ jobs:
       - name: Set Image Tags in Kustomize Overlays
         if: ${{ inputs.image-overlays != '' && inputs.image-name != '' }}
         run: |
-          # Extract the first tag (usually the semver)
+          # Extract the first tag
           TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1 | cut -d':' -f2)
           
           echo "Will set image tag to: ${TAG}"
           echo "Image name: ${{ inputs.image-name }}"
           
+          # Get absolute path to workspace
+          WORKSPACE_ROOT="${GITHUB_WORKSPACE}"
+          
           # Split the comma-separated overlay paths
           IFS=',' read -ra OVERLAYS <<< "${{ inputs.image-overlays }}"
           
           for overlay_path in "${OVERLAYS[@]}"; do
-            overlay_path=$(echo "$overlay_path" | xargs)  # Trim whitespace
+            overlay_path=$(echo "$overlay_path" | xargs)
+            FULL_PATH="${WORKSPACE_ROOT}/${overlay_path}"
             
-            if [ -f "${overlay_path}/kustomization.yaml" ]; then
-              echo "Setting image ${{ inputs.image-name }}:${TAG} in ${overlay_path}"
-              cd "${overlay_path}"
-              kustomize edit set image "${{ inputs.image-name }}=${{ inputs.image-name }}:${TAG}"
-              cat kustomization.yaml
-              cd - > /dev/null
+            if [ -f "${FULL_PATH}/kustomization.yaml" ]; then
+              echo "Setting image ${{ inputs.image-name }}:${TAG} in ${FULL_PATH}"
+              
+              # Use absolute path and don't change directory
+              kustomize edit set image \
+                "${{ inputs.image-name }}=${{ inputs.image-name }}:${TAG}" \
+                --path "${FULL_PATH}"
+              
+              echo "Modified kustomization.yaml:"
+              cat "${FULL_PATH}/kustomization.yaml"
             else
-              echo "Error: ${overlay_path}/kustomization.yaml not found"
+              echo "Error: ${FULL_PATH}/kustomization.yaml not found"
               exit 1
             fi
           done
+          
+          # Sync filesystem to ensure all writes are complete
+          sync
+
+      - name: Verify bundle structure before publish
+        run: |
+          echo "Verifying bundle structure at: ${{ inputs.bundle-path }}"
+          find "${{ inputs.bundle-path }}" -type f -o -type d | sort
+          echo "---"
+          echo "Directory structure:"
+          tree "${{ inputs.bundle-path }}" || ls -lR "${{ inputs.bundle-path }}"
 
       - name: Publish Bundle
         id: publish
         run: |
+          # Use absolute path for bundle
+          BUNDLE_PATH="${GITHUB_WORKSPACE}/${{ inputs.bundle-path }}"
+          
+          echo "Publishing from: ${BUNDLE_PATH}"
+          
           DIGEST=""
           while IFS= read -r tag; do
             tag_version="${tag#*:}"
             echo "Publishing bundle to: oci://${tag}"
+            
             RESULT=$(flux push artifact \
               "oci://${tag}" \
-              --path="${{ inputs.bundle-path }}" \
+              --path="${BUNDLE_PATH}" \
               --source="https://github.com/${GITHUB_REPOSITORY}" \
               --revision="${tag_version}@sha1:$(git rev-parse HEAD)" \
               --output=json)
 
-            # Extract digest from the first push (all pushes should have the same digest)
             if [ -z "$DIGEST" ]; then
               DIGEST=$(echo "$RESULT" | jq -r '.digest // empty')
             fi
+            
+            # Verify the push was successful
+            echo "Push result: ${RESULT}"
           done < <(echo "${{ steps.meta.outputs.tags }}")
+
+          if [ -z "$DIGEST" ]; then
+            echo "Error: No digest was generated"
+            exit 1
+          fi
 
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
