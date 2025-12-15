@@ -99,10 +99,10 @@ jobs:
             if [ -f "${FULL_PATH}/kustomization.yaml" ]; then
               echo "Setting image ${{ inputs.image-name }}:${TAG} in ${FULL_PATH}"
               
-              # Use absolute path and don't change directory
-              kustomize edit set image \
-                "${{ inputs.image-name }}=${{ inputs.image-name }}:${TAG}" \
-                --path "${FULL_PATH}"
+              # Change to the directory and run kustomize edit
+              pushd "${FULL_PATH}" > /dev/null
+              kustomize edit set image "${{ inputs.image-name }}=${{ inputs.image-name }}:${TAG}"
+              popd > /dev/null
               
               echo "Modified kustomization.yaml:"
               cat "${FULL_PATH}/kustomization.yaml"
