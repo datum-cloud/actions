@@ -48,7 +48,7 @@ jobs:
         uses: actions/checkout@v6
       
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3.4.0
+        uses: docker/login-action@v3.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -86,20 +86,19 @@ jobs:
           echo "Will set image tag to: ${TAG}"
           echo "Image name: ${{ inputs.image-name }}"
           
-          # Get absolute path to workspace
+          # Use absolute paths to avoid directory confusion
           WORKSPACE_ROOT="${GITHUB_WORKSPACE}"
           
           # Split the comma-separated overlay paths
           IFS=',' read -ra OVERLAYS <<< "${{ inputs.image-overlays }}"
           
           for overlay_path in "${OVERLAYS[@]}"; do
-            overlay_path=$(echo "$overlay_path" | xargs)
+            overlay_path=$(echo "$overlay_path" | xargs)  # Trim whitespace
             FULL_PATH="${WORKSPACE_ROOT}/${overlay_path}"
             
             if [ -f "${FULL_PATH}/kustomization.yaml" ]; then
               echo "Setting image ${{ inputs.image-name }}:${TAG} in ${FULL_PATH}"
               
-              # Change to the directory and run kustomize edit
               pushd "${FULL_PATH}" > /dev/null
               kustomize edit set image "${{ inputs.image-name }}=${{ inputs.image-name }}:${TAG}"
               popd > /dev/null
@@ -112,30 +111,71 @@ jobs:
             fi
           done
           
-          # Sync filesystem to ensure all writes are complete
+          # CRITICAL: Ensure all filesystem operations are complete
           sync
-
-      - name: Verify bundle structure before publish
-        run: |
-          echo "Verifying bundle structure at: ${{ inputs.bundle-path }}"
+          
+          # Give the filesystem a moment to settle
+          sleep 1
+          
+          echo "=== Final bundle structure ==="
           find "${{ inputs.bundle-path }}" -type f -o -type d | sort
-          echo "---"
-          echo "Directory structure:"
-          tree "${{ inputs.bundle-path }}" || ls -lR "${{ inputs.bundle-path }}"
 
-      - name: Publish Bundle
+      - name: Debug - Verify bundle structure before publish
+        run: |
+          echo "=== VERIFICATION: Bundle structure at ${{ inputs.bundle-path }} ==="
+          echo "Absolute path: ${GITHUB_WORKSPACE}/${{ inputs.bundle-path }}"
+          
+          echo ""
+          echo "Directory tree:"
+          tree "${{ inputs.bundle-path }}" || ls -lR "${{ inputs.bundle-path }}"
+          
+          echo ""
+          echo "File count:"
+          find "${{ inputs.bundle-path }}" -type f | wc -l
+          
+          echo ""
+          echo "Checking for expected directories:"
+          for dir in base gateway; do
+            if [ -d "${{ inputs.bundle-path }}/${dir}" ]; then
+              echo "✅ ${dir}/ exists with $(find ${{ inputs.bundle-path }}/${dir} -type f | wc -l) files"
+            else
+              echo "❌ ${dir}/ NOT FOUND"
+            fi
+          done
+
+      - name: Publish Bundle (with timing analysis)
         id: publish
         run: |
-          # Use absolute path for bundle
           BUNDLE_PATH="${GITHUB_WORKSPACE}/${{ inputs.bundle-path }}"
           
           echo "Publishing from: ${BUNDLE_PATH}"
           
           DIGEST=""
+          PUSH_COUNT=0
+          
           while IFS= read -r tag; do
-            tag_version="${tag#*:}"
-            echo "Publishing bundle to: oci://${tag}"
+            PUSH_COUNT=$((PUSH_COUNT + 1))
             
+            # Add delay between pushes (except for the first one)
+            if [ ${PUSH_COUNT} -gt 1 ]; then
+              echo ""
+              echo "⏱️  Waiting 3 seconds before next push..."
+              sleep 3
+            fi
+            
+            tag_version="${tag#*:}"
+            echo ""
+            echo "=========================================="
+            echo "Push #${PUSH_COUNT}: oci://${tag}"
+            echo "=========================================="
+            
+            # Verify structure before EACH push
+            echo "📁 Directory structure before push #${PUSH_COUNT}:"
+            find "${BUNDLE_PATH}" -type d | sort
+            echo "📄 File count: $(find "${BUNDLE_PATH}" -type f | wc -l)"
+            
+            echo ""
+            echo "🚀 Pushing artifact..."
             RESULT=$(flux push artifact \
               "oci://${tag}" \
               --path="${BUNDLE_PATH}" \
@@ -143,16 +183,42 @@ jobs:
               --revision="${tag_version}@sha1:$(git rev-parse HEAD)" \
               --output=json)
 
+            CURRENT_DIGEST=$(echo "$RESULT" | jq -r '.digest')
+            echo "✅ Push #${PUSH_COUNT} complete"
+            echo "   Digest: ${CURRENT_DIGEST}"
+            
             if [ -z "$DIGEST" ]; then
-              DIGEST=$(echo "$RESULT" | jq -r '.digest // empty')
+              DIGEST="${CURRENT_DIGEST}"
+              echo "   (This is the first digest - using as reference)"
+            else
+              # Check if all digests are the same
+              if [ "${CURRENT_DIGEST}" != "${DIGEST}" ]; then
+                echo ""
+                echo "⚠️⚠️⚠️  DIGEST MISMATCH DETECTED ⚠️⚠️⚠️"
+                echo "   Expected: ${DIGEST}"
+                echo "   Got:      ${CURRENT_DIGEST}"
+                echo "   This means the artifacts are DIFFERENT!"
+                echo ""
+              else
+                echo "   ✅ Digest matches reference (artifacts are identical)"
+              fi
             fi
             
-            # Verify the push was successful
-            echo "Push result: ${RESULT}"
+            echo ""
+            echo "Full push result:"
+            echo "${RESULT}" | jq '.'
+            
           done < <(echo "${{ steps.meta.outputs.tags }}")
 
+          echo ""
+          echo "=========================================="
+          echo "Summary"
+          echo "=========================================="
+          echo "Total pushes: ${PUSH_COUNT}"
+          echo "Final digest: ${DIGEST}"
+          
           if [ -z "$DIGEST" ]; then
-            echo "Error: No digest was generated"
+            echo "❌ Error: No digest was generated"
             exit 1
           fi
 
