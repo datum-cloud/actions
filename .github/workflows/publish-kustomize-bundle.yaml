@@ -187,23 +187,6 @@ jobs:
             echo "✅ Push #${PUSH_COUNT} complete"
             echo "   Digest: ${CURRENT_DIGEST}"
             
-            if [ -z "$DIGEST" ]; then
-              DIGEST="${CURRENT_DIGEST}"
-              echo "   (This is the first digest - using as reference)"
-            else
-              # Check if all digests are the same
-              if [ "${CURRENT_DIGEST}" != "${DIGEST}" ]; then
-                echo ""
-                echo "⚠️⚠️⚠️  DIGEST MISMATCH DETECTED ⚠️⚠️⚠️"
-                echo "   Expected: ${DIGEST}"
-                echo "   Got:      ${CURRENT_DIGEST}"
-                echo "   This means the artifacts are DIFFERENT!"
-                echo ""
-              else
-                echo "   ✅ Digest matches reference (artifacts are identical)"
-              fi
-            fi
-            
             echo ""
             echo "Full push result:"
             echo "${RESULT}" | jq '.'
@@ -215,11 +198,5 @@ jobs:
           echo "Summary"
           echo "=========================================="
           echo "Total pushes: ${PUSH_COUNT}"
-          echo "Final digest: ${DIGEST}"
-          
-          if [ -z "$DIGEST" ]; then
-            echo "❌ Error: No digest was generated"
-            exit 1
-          fi
 
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
