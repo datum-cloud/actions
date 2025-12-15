@@ -21,6 +21,11 @@ on:
         type: string
         description: "The image name to set (e.g. 'ghcr.io/datum-cloud/datum-net')"
         default: ""
+      debug:
+        required: false
+        type: boolean
+        description: "Enable debug output and verification steps"
+        default: false
     outputs:
       tags:
         description: "Generated tags for the bundle"
@@ -121,6 +126,7 @@ jobs:
           find "${{ inputs.bundle-path }}" -type f -o -type d | sort
 
       - name: Debug - Verify bundle structure before publish
+        if: ${{ inputs.debug }}
         run: |
           echo "=== VERIFICATION: Bundle structure at ${{ inputs.bundle-path }} ==="
           echo "Absolute path: ${GITHUB_WORKSPACE}/${{ inputs.bundle-path }}"
@@ -169,10 +175,12 @@ jobs:
             echo "Push #${PUSH_COUNT}: oci://${tag}"
             echo "=========================================="
             
-            # Verify structure before EACH push
-            echo "📁 Directory structure before push #${PUSH_COUNT}:"
-            find "${BUNDLE_PATH}" -type d | sort
-            echo "📄 File count: $(find "${BUNDLE_PATH}" -type f | wc -l)"
+            # Verify structure before EACH push (if debug is enabled)
+            if [ "${{ inputs.debug }}" = "true" ]; then
+              echo "📁 Directory structure before push #${PUSH_COUNT}:"
+              find "${BUNDLE_PATH}" -type d | sort
+              echo "📄 File count: $(find "${BUNDLE_PATH}" -type f | wc -l)"
+            fi
             
             echo ""
             echo "🚀 Pushing artifact..."
