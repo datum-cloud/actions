@@ -7,6 +7,16 @@ on:
         required: true
         type: string
         description: "The name of the image that should be used, excluding the repository (e.g. `cloud-portal`)"
+      context:
+        required: false
+        type: string
+        description: "Build context path relative to the repository root (e.g. `.` or `apps/myapp`)"
+        default: "."
+      dockerfile-path:
+        required: false
+        type: string
+        description: "Path to the Dockerfile relative to the repository root (e.g. `Dockerfile` or `dockerfiles/app.Dockerfile`)"
+        default: "Dockerfile"
       extra-build-args:
         required: false
         type: string
@@ -89,7 +99,8 @@ jobs:
         id: push
         uses: docker/build-push-action@v6.18.0
         with:
-          context: .
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile-path }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

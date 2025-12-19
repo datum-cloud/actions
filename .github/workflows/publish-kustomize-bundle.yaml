@@ -21,6 +21,11 @@ on:
         type: string
         description: "The image name to set (e.g. 'ghcr.io/datum-cloud/datum-net')"
         default: ""
+      debug:
+        required: false
+        type: boolean
+        description: "Enable debug output and verification steps"
+        default: false
     outputs:
       tags:
         description: "Generated tags for the bundle"
@@ -80,48 +85,126 @@ jobs:
       - name: Set Image Tags in Kustomize Overlays
         if: ${{ inputs.image-overlays != '' && inputs.image-name != '' }}
         run: |
-          # Extract the first tag (usually the semver)
+          # Extract the first tag
           TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1 | cut -d':' -f2)
           
           echo "Will set image tag to: ${TAG}"
           echo "Image name: ${{ inputs.image-name }}"
+          
+          # Use absolute paths to avoid directory confusion
+          WORKSPACE_ROOT="${GITHUB_WORKSPACE}"
           
           # Split the comma-separated overlay paths
           IFS=',' read -ra OVERLAYS <<< "${{ inputs.image-overlays }}"
           
           for overlay_path in "${OVERLAYS[@]}"; do
             overlay_path=$(echo "$overlay_path" | xargs)  # Trim whitespace
+            FULL_PATH="${WORKSPACE_ROOT}/${overlay_path}"
             
-            if [ -f "${overlay_path}/kustomization.yaml" ]; then
-              echo "Setting image ${{ inputs.image-name }}:${TAG} in ${overlay_path}"
-              cd "${overlay_path}"
+            if [ -f "${FULL_PATH}/kustomization.yaml" ]; then
+              echo "Setting image ${{ inputs.image-name }}:${TAG} in ${FULL_PATH}"
+              
+              pushd "${FULL_PATH}" > /dev/null
               kustomize edit set image "${{ inputs.image-name }}=${{ inputs.image-name }}:${TAG}"
-              cat kustomization.yaml
-              cd - > /dev/null
+              popd > /dev/null
+              
+              echo "Modified kustomization.yaml:"
+              cat "${FULL_PATH}/kustomization.yaml"
             else
-              echo "Error: ${overlay_path}/kustomization.yaml not found"
+              echo "Error: ${FULL_PATH}/kustomization.yaml not found"
               exit 1
             fi
           done
+          
+          # CRITICAL: Ensure all filesystem operations are complete
+          sync
+          
+          # Give the filesystem a moment to settle
+          sleep 1
+          
+          echo "=== Final bundle structure ==="
+          find "${{ inputs.bundle-path }}" -type f -o -type d | sort
 
-      - name: Publish Bundle
+      - name: Debug - Verify bundle structure before publish
+        if: ${{ inputs.debug }}
+        run: |
+          echo "=== VERIFICATION: Bundle structure at ${{ inputs.bundle-path }} ==="
+          echo "Absolute path: ${GITHUB_WORKSPACE}/${{ inputs.bundle-path }}"
+          
+          echo ""
+          echo "Directory tree:"
+          tree "${{ inputs.bundle-path }}" || ls -lR "${{ inputs.bundle-path }}"
+          
+          echo ""
+          echo "File count:"
+          find "${{ inputs.bundle-path }}" -type f | wc -l
+          
+          echo ""
+          echo "Checking for expected directories:"
+          for dir in base gateway; do
+            if [ -d "${{ inputs.bundle-path }}/${dir}" ]; then
+              echo "✅ ${dir}/ exists with $(find ${{ inputs.bundle-path }}/${dir} -type f | wc -l) files"
+            else
+              echo "❌ ${dir}/ NOT FOUND"
+            fi
+          done
+
+      - name: Publish Bundle (with timing analysis)
         id: publish
         run: |
+          BUNDLE_PATH="${GITHUB_WORKSPACE}/${{ inputs.bundle-path }}"
+          
+          echo "Publishing from: ${BUNDLE_PATH}"
+          
           DIGEST=""
+          PUSH_COUNT=0
+          
           while IFS= read -r tag; do
+            PUSH_COUNT=$((PUSH_COUNT + 1))
+            
+            # Add delay between pushes (except for the first one)
+            if [ ${PUSH_COUNT} -gt 1 ]; then
+              echo ""
+              echo "⏱️  Waiting 3 seconds before next push..."
+              sleep 3
+            fi
+            
             tag_version="${tag#*:}"
-            echo "Publishing bundle to: oci://${tag}"
+            echo ""
+            echo "=========================================="
+            echo "Push #${PUSH_COUNT}: oci://${tag}"
+            echo "=========================================="
+            
+            # Verify structure before EACH push (if debug is enabled)
+            if [ "${{ inputs.debug }}" = "true" ]; then
+              echo "📁 Directory structure before push #${PUSH_COUNT}:"
+              find "${BUNDLE_PATH}" -type d | sort
+              echo "📄 File count: $(find "${BUNDLE_PATH}" -type f | wc -l)"
+            fi
+            
+            echo ""
+            echo "🚀 Pushing artifact..."
             RESULT=$(flux push artifact \
               "oci://${tag}" \
-              --path="${{ inputs.bundle-path }}" \
+              --path="${BUNDLE_PATH}" \
               --source="https://github.com/${GITHUB_REPOSITORY}" \
               --revision="${tag_version}@sha1:$(git rev-parse HEAD)" \
               --output=json)
 
-            # Extract digest from the first push (all pushes should have the same digest)
-            if [ -z "$DIGEST" ]; then
-              DIGEST=$(echo "$RESULT" | jq -r '.digest // empty')
-            fi
+            CURRENT_DIGEST=$(echo "$RESULT" | jq -r '.digest')
+            echo "✅ Push #${PUSH_COUNT} complete"
+            echo "   Digest: ${CURRENT_DIGEST}"
+            
+            echo ""
+            echo "Full push result:"
+            echo "${RESULT}" | jq '.'
+            
           done < <(echo "${{ steps.meta.outputs.tags }}")
+
+          echo ""
+          echo "=========================================="
+          echo "Summary"
+          echo "=========================================="
+          echo "Total pushes: ${PUSH_COUNT}"
 
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
