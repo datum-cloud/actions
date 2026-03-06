@@ -1,0 +1,39 @@
+name: Enforce Single Assignee
+
+on:
+  workflow_call:
+
+jobs:
+  enforce:
+    name: Enforce Single Assignee
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Enforce single assignee
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSIGNEES: ${{ toJSON(github.event.issue.assignees) }}
+          LATEST_ASSIGNEE: ${{ github.event.assignee.login }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          COUNT=$(echo "$ASSIGNEES" | jq 'length')
+
+          if [ "$COUNT" -le 1 ]; then
+            echo "Issue has $COUNT assignee(s). No action needed."
+            exit 0
+          fi
+
+          echo "Issue has $COUNT assignees. Keeping '$LATEST_ASSIGNEE', removing others."
+
+          TO_REMOVE=$(echo "$ASSIGNEES" | jq --arg keep "$LATEST_ASSIGNEE" \
+            '[.[] | select(.login != $keep) | .login]')
+
+          echo "Removing: $(echo "$TO_REMOVE" | jq -r '.[]')"
+
+          gh api "repos/$REPO/issues/$ISSUE_NUMBER/assignees" \
+            -X DELETE \
+            --input - <<< "{\"assignees\": $TO_REMOVE}"
+
+          echo "Done. Issue now has 1 assignee: $LATEST_ASSIGNEE"
