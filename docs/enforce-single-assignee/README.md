@@ -25,10 +25,7 @@ permissions:
 | Assignee count | Action taken |
 |---|---|
 | 0 or 1 | No action taken |
-| 2+ | All assignees except the most recently assigned user are removed |
-
-The most recently assigned user is determined by `github.event.assignee`,
-which GitHub populates with the user who triggered the `assigned` event.
+| 2+ | All assignees are removed and a comment is posted listing who was attempted, asking the team to assign a single owner |
 
 ## Calling Example
 
@@ -58,5 +55,4 @@ environment variable will be empty and the GitHub API call will fail.
 ### Workflow not triggered
 
 Verify the calling workflow is triggered on `issues: [assigned]`. Other issue
-event types (e.g., `opened`, `edited`) do not populate `github.event.assignee`
-and will not work correctly with this workflow.
+event types (e.g., `opened`, `edited`) will not trigger this workflow.

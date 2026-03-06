@@ -16,7 +16,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ASSIGNEES: ${{ toJSON(github.event.issue.assignees) }}
-          LATEST_ASSIGNEE: ${{ github.event.assignee.login }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
         run: |
@@ -27,15 +26,17 @@ jobs:
             exit 0
           fi
 
-          echo "Issue has $COUNT assignees. Keeping '$LATEST_ASSIGNEE', removing others."
+          echo "Issue has $COUNT assignees. Removing all and posting comment."
 
-          TO_REMOVE=$(echo "$ASSIGNEES" | jq --arg keep "$LATEST_ASSIGNEE" \
-            '[.[] | select(.login != $keep) | .login]')
-
-          echo "Removing: $(echo "$TO_REMOVE" | jq -r '.[]')"
+          ALL_LOGINS=$(echo "$ASSIGNEES" | jq '[.[].login]')
+          NAMES=$(echo "$ASSIGNEES" | jq -r '[.[].login] | map("@"+.) | join(", ")')
 
           gh api "repos/$REPO/issues/$ISSUE_NUMBER/assignees" \
             -X DELETE \
-            --input - <<< "{\"assignees\": $TO_REMOVE}"
+            --input - <<< "{\"assignees\": $ALL_LOGINS}"
 
-          echo "Done. Issue now has 1 assignee: $LATEST_ASSIGNEE"
+          gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" \
+            -X POST \
+            --input - <<< "{\"body\": \"Issues must have exactly one assignee, but $COUNT were assigned ($NAMES). All assignees have been removed. Please assign a single owner.\"}"
+
+          echo "Done. Removed all assignees and posted comment."
