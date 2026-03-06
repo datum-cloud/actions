@@ -2,6 +2,8 @@ name: Enforce Single Assignee
 
 on:
   workflow_call:
+  issues:
+    types: [assigned]
 
 jobs:
   enforce:
