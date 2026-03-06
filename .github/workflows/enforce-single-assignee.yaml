@@ -17,10 +17,12 @@ jobs:
       - name: Enforce single assignee
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ASSIGNEES: ${{ toJSON(github.event.issue.assignees) }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
         run: |
+          sleep 3
+
+          ASSIGNEES=$(gh api "repos/$REPO/issues/$ISSUE_NUMBER" --jq '.assignees')
           COUNT=$(echo "$ASSIGNEES" | jq 'length')
 
           if [ "$COUNT" -le 1 ]; then
