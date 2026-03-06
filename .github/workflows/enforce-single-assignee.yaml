@@ -9,6 +9,8 @@ jobs:
   enforce:
     name: Enforce Single Assignee
     runs-on: ubuntu-latest
+    concurrency:
+      group: enforce-single-assignee-${{ github.event.issue.number }}
     permissions:
       issues: write
     steps:
