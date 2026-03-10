@@ -59,15 +59,19 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ${{ inputs.package-path }}/package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
           cache: pnpm
+          cache-dependency-path: ${{ inputs.package-path }}/pnpm-lock.yaml
           registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
+        working-directory: ${{ inputs.package-path }}
         run: pnpm install --frozen-lockfile
 
       - name: Determine version bump type from PR labels
@@ -109,7 +113,8 @@ jobs:
         run: git push origin main --follow-tags
 
       - name: Build package
-        run: pnpm --filter ${{ inputs.package-name }} build
+        working-directory: ${{ inputs.package-path }}
+        run: pnpm run build
 
       - name: Publish to npm
         working-directory: ${{ inputs.package-path }}
