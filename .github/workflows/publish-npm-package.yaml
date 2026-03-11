@@ -16,10 +16,18 @@ on:
         type: number
         description: "Node.js version to use"
         default: 24
+      release-mode:
+        required: false
+        type: string
+        description: >
+          Publishing mode: "dev" publishes a pre-release version (x.y.z-dev.{sha})
+          to the dev dist-tag, "release" publishes a stable version to the latest
+          dist-tag with an auto-bumped version. Defaults to "dev".
+        default: dev
     outputs:
       new-version:
-        description: "The new version that was published (e.g. `v1.2.3`)"
-        value: ${{ jobs.publish.outputs.new-version }}
+        description: "The new version that was published (e.g. `v1.2.3` or `0.1.2-dev.abc1234`)"
+        value: ${{ jobs.publish-release.outputs.new-version || jobs.publish-dev.outputs.new-version }}
 
 jobs:
   changes:
@@ -29,12 +37,15 @@ jobs:
     # version. The committer name for GITHUB_TOKEN pushes is "github-actions[bot]".
     if: github.actor != 'github-actions[bot]'
     outputs:
-      package: ${{ steps.filter.outputs.package }}
+      # For release mode, always publish (skip path filtering). Releases are
+      # intentional and should not be gated on which files changed.
+      package: ${{ inputs.release-mode == 'release' && 'true' || steps.filter.outputs.package }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Check changed paths
+        if: inputs.release-mode != 'release'
         id: filter
         uses: dorny/paths-filter@v3
         with:
@@ -42,10 +53,80 @@ jobs:
             package:
               - '${{ inputs.package-path }}/**'
 
-  publish:
-    name: Publish to npm
+  # ── Dev publish ─────────────────────────────────────────────────────────
+  # Publishes a pre-release version (e.g. 0.1.2-dev.abc1234) to the "dev"
+  # npm dist-tag on every push to main. No version bump commit or git tag.
+  # Consumers install via: npm install <package>@dev
+  publish-dev:
+    name: Publish dev build
     needs: changes
-    if: needs.changes.outputs.package == 'true'
+    if: needs.changes.outputs.package == 'true' && inputs.release-mode == 'dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # needed for npm trusted publishing (OIDC)
+    outputs:
+      new-version: ${{ steps.version.outputs.new-version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ${{ inputs.package-path }}/package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.package-path }}/pnpm-lock.yaml
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        working-directory: ${{ inputs.package-path }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Compute dev version
+        id: version
+        working-directory: ${{ inputs.package-path }}
+        run: |
+          BASE_VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          DEV_VERSION="${BASE_VERSION}-dev.${SHORT_SHA}"
+          echo "new-version=${DEV_VERSION}" >> "$GITHUB_OUTPUT"
+
+          # Write the dev version into package.json (local only, not committed)
+          npm version "${DEV_VERSION}" --no-git-tag-version
+
+      - name: Build package
+        working-directory: ${{ inputs.package-path }}
+        run: pnpm run build
+
+      - name: Publish to npm (dev)
+        working-directory: ${{ inputs.package-path }}
+        run: pnpm publish --no-git-checks --access public --provenance --tag dev
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published dev build ${{ steps.version.outputs.new-version }}"
+            echo ""
+            echo "Package: \`${{ inputs.package-name }}\`"
+            echo "Install: \`npm install ${{ inputs.package-name }}@dev\`"
+            echo "Pin: \`npm install ${{ inputs.package-name }}@${{ steps.version.outputs.new-version }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Release publish ─────────────────────────────────────────────────────
+  # Publishes a stable version to the "latest" npm dist-tag. Bumps the
+  # version in package.json, creates a git tag, and pushes back to main.
+  # Triggered when the caller sets release-mode to "release".
+  publish-release:
+    name: Publish release
+    needs: changes
+    if: needs.changes.outputs.package == 'true' && inputs.release-mode == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: write  # needed to push the version bump commit and tag
