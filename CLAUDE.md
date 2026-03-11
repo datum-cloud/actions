@@ -66,34 +66,29 @@ Publishes npm packages with two modes: dev builds on every push to main, and sta
 - Publishes stable version to the `latest` npm dist-tag
 - Needs `contents: write` for the version bump push
 
-**Typical caller setup:**
+**Typical caller setup (single workflow file):**
 ```yaml
-# Dev builds on push to main
+name: Publish Package
 on:
   push:
     branches: [main]
-jobs:
-  publish:
-    uses: datum-cloud/actions/.github/workflows/publish-npm-package.yaml@v1
-    with:
-      package-name: "@datum-cloud/my-package"
-      package-path: packages/my-package
-      release-mode: dev
-    secrets: inherit
-
-# Stable releases on GitHub release creation
-on:
   release:
     types: [published]
+
 jobs:
   publish:
     uses: datum-cloud/actions/.github/workflows/publish-npm-package.yaml@v1
     with:
       package-name: "@datum-cloud/my-package"
       package-path: packages/my-package
-      release-mode: release
+      release-mode: ${{ github.event_name == 'release' && 'release' || 'dev' }}
     secrets: inherit
 ```
+
+Dev builds are published on every push to main. Stable releases are published
+when a GitHub release is created. The `release-mode` expression selects the
+right mode automatically. For release events, path filtering is skipped since
+releases are intentional.
 
 ### 4. Lint GitHub Actions Workflows (`.github/workflows/lint-workflows.yaml`)
 

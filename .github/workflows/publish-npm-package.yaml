@@ -37,12 +37,15 @@ jobs:
     # version. The committer name for GITHUB_TOKEN pushes is "github-actions[bot]".
     if: github.actor != 'github-actions[bot]'
     outputs:
-      package: ${{ steps.filter.outputs.package }}
+      # For release mode, always publish (skip path filtering). Releases are
+      # intentional and should not be gated on which files changed.
+      package: ${{ inputs.release-mode == 'release' && 'true' || steps.filter.outputs.package }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Check changed paths
+        if: inputs.release-mode != 'release'
         id: filter
         uses: dorny/paths-filter@v3
         with:
