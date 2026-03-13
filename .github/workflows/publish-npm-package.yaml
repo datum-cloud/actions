@@ -16,6 +16,22 @@ on:
         type: number
         description: "Node.js version to use"
         default: 24
+      lockfile-path:
+        required: false
+        type: string
+        description: >
+          Path to pnpm-lock.yaml relative to the repo root.
+          Defaults to "<package-path>/pnpm-lock.yaml".
+          Set to "pnpm-lock.yaml" for monorepos with a root lockfile.
+        default: ""
+      install-path:
+        required: false
+        type: string
+        description: >
+          Working directory for pnpm install.
+          Defaults to package-path.
+          Set to "." for monorepos that install from the repo root.
+        default: ""
       release-mode:
         required: false
         type: string
@@ -82,11 +98,11 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: pnpm
-          cache-dependency-path: ${{ inputs.package-path }}/pnpm-lock.yaml
+          cache-dependency-path: ${{ inputs.lockfile-path || format('{0}/pnpm-lock.yaml', inputs.package-path) }}
           registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
-        working-directory: ${{ inputs.package-path }}
+        working-directory: ${{ inputs.install-path || inputs.package-path }}
         run: pnpm install --frozen-lockfile
 
       - name: Compute dev version
@@ -150,11 +166,11 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           cache: pnpm
-          cache-dependency-path: ${{ inputs.package-path }}/pnpm-lock.yaml
+          cache-dependency-path: ${{ inputs.lockfile-path || format('{0}/pnpm-lock.yaml', inputs.package-path) }}
           registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
-        working-directory: ${{ inputs.package-path }}
+        working-directory: ${{ inputs.install-path || inputs.package-path }}
         run: pnpm install --frozen-lockfile
 
       - name: Determine version bump type from PR labels
