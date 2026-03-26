@@ -40,6 +40,15 @@ on:
           to the dev dist-tag, "release" publishes a stable version to the latest
           dist-tag with an auto-bumped version. Defaults to "dev".
         default: dev
+      bump-type:
+        required: false
+        type: string
+        description: >
+          Version bump type for release mode: "major", "minor", or "patch".
+          If not provided, the bump type is detected from the merged PR's labels
+          (release:major, release:minor, or patch as the default).
+          Use this when triggering via workflow_dispatch where no PR is available.
+        default: ""
     outputs:
       new-version:
         description: "The new version that was published (e.g. `v1.2.3` or `0.1.2-dev.abc1234`)"
@@ -137,15 +146,16 @@ jobs:
 
   # ── Release publish ─────────────────────────────────────────────────────
   # Publishes a stable version to the "latest" npm dist-tag. Bumps the
-  # version in package.json, creates a git tag, and pushes back to main.
-  # Triggered when the caller sets release-mode to "release".
+  # version in package.json, creates a git tag, pushes back to main, and
+  # creates a GitHub Release. Triggered when the caller sets release-mode
+  # to "release".
   publish-release:
     name: Publish release
     needs: changes
     if: needs.changes.outputs.package == 'true' && inputs.release-mode == 'release'
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # needed to push the version bump commit and tag
+      contents: write  # needed to push the version bump commit, tag, and create GH release
       id-token: write  # needed for npm trusted publishing (OIDC)
     outputs:
       new-version: ${{ steps.version.outputs.new-version }}
@@ -173,12 +183,18 @@ jobs:
         working-directory: ${{ inputs.install-path || inputs.package-path }}
         run: pnpm install --frozen-lockfile
 
-      - name: Determine version bump type from PR labels
+      - name: Determine version bump type
         id: bump-type
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Find the PR that was merged into this commit and read its labels.
+          # Use explicit bump-type input if provided (e.g. from workflow_dispatch).
+          if [[ -n "${{ inputs.bump-type }}" ]]; then
+            echo "type=${{ inputs.bump-type }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Otherwise detect from the merged PR's labels.
           # Falls back to "patch" if no relevant label is found.
           PR_LABELS=$(gh pr list \
             --state merged \
@@ -218,6 +234,15 @@ jobs:
       - name: Publish to npm
         working-directory: ${{ inputs.package-path }}
         run: pnpm publish --no-git-checks --access public --provenance
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ steps.version.outputs.new-version }} \
+            --title "${{ inputs.package-name }} ${{ steps.version.outputs.new-version }}" \
+            --generate-notes \
+            --repo ${{ github.repository }}
 
       - name: Summary
         run: |
