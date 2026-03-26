@@ -146,9 +146,10 @@ jobs:
 
   # ── Release publish ─────────────────────────────────────────────────────
   # Publishes a stable version to the "latest" npm dist-tag. Bumps the
-  # version in package.json, creates a git tag, pushes back to main, and
-  # creates a GitHub Release. Triggered when the caller sets release-mode
-  # to "release".
+  # version in package.json, creates a git tag, and pushes back to main.
+  # Triggered when the caller sets release-mode to "release".
+  # GitHub Release creation is the caller's responsibility — npm publishing
+  # is just one step in a release, not the whole thing.
   publish-release:
     name: Publish release
     needs: changes
@@ -239,17 +240,6 @@ jobs:
       - name: Publish to npm
         working-directory: ${{ inputs.package-path }}
         run: pnpm publish --no-git-checks --access public --provenance
-
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_VERSION: ${{ steps.version.outputs.new-version }}
-          PACKAGE_NAME: ${{ inputs.package-name }}
-        run: |
-          gh release create "$RELEASE_VERSION" \
-            --title "$PACKAGE_NAME $RELEASE_VERSION" \
-            --generate-notes \
-            --repo ${{ github.repository }}
 
       - name: Summary
         run: |
