@@ -187,10 +187,15 @@ jobs:
         id: bump-type
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_BUMP_TYPE: ${{ inputs.bump-type }}
         run: |
           # Use explicit bump-type input if provided (e.g. from workflow_dispatch).
-          if [[ -n "${{ inputs.bump-type }}" ]]; then
-            echo "type=${{ inputs.bump-type }}" >> "$GITHUB_OUTPUT"
+          if [[ -n "$INPUT_BUMP_TYPE" ]]; then
+            if [[ "$INPUT_BUMP_TYPE" != "major" && "$INPUT_BUMP_TYPE" != "minor" && "$INPUT_BUMP_TYPE" != "patch" ]]; then
+              echo "::error::Invalid bump-type '$INPUT_BUMP_TYPE'. Must be major, minor, or patch."
+              exit 1
+            fi
+            echo "type=$INPUT_BUMP_TYPE" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -238,9 +243,11 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ steps.version.outputs.new-version }}
+          PACKAGE_NAME: ${{ inputs.package-name }}
         run: |
-          gh release create ${{ steps.version.outputs.new-version }} \
-            --title "${{ inputs.package-name }} ${{ steps.version.outputs.new-version }}" \
+          gh release create "$RELEASE_VERSION" \
+            --title "$PACKAGE_NAME $RELEASE_VERSION" \
             --generate-notes \
             --repo ${{ github.repository }}
 
