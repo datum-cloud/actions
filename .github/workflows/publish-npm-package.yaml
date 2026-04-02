@@ -37,20 +37,21 @@ on:
         type: string
         description: >
           Publishing mode: "dev" publishes a pre-release version (x.y.z-dev.{sha})
-          to the dev dist-tag, "release" publishes a stable version to the latest
-          dist-tag with an auto-bumped version. Defaults to "dev".
+          to the dev dist-tag. "release" publishes the version already present in
+          package.json to the latest dist-tag. Version bumping, tagging, and git
+          operations are the caller's responsibility. Defaults to "dev".
         default: dev
     outputs:
       new-version:
-        description: "The new version that was published (e.g. `v1.2.3` or `0.1.2-dev.abc1234`)"
+        description: "The version that was published (e.g. `v1.2.3` or `0.1.2-dev.abc1234`)"
         value: ${{ jobs.publish-release.outputs.new-version || jobs.publish-dev.outputs.new-version }}
 
 jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
-    # Skip the bot commit that this workflow itself creates when bumping the
-    # version. The committer name for GITHUB_TOKEN pushes is "github-actions[bot]".
+    # Skip the bot commit that callers create when bumping the version.
+    # The committer name for GITHUB_TOKEN pushes is "github-actions[bot]".
     if: github.actor != 'github-actions[bot]'
     outputs:
       # For release mode, always publish (skip path filtering). Releases are
@@ -135,17 +136,18 @@ jobs:
             echo "Pin: \`npm install ${{ inputs.package-name }}@${{ steps.version.outputs.new-version }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # ── Release publish ─────────────────────────────────────────────────────
-  # Publishes a stable version to the "latest" npm dist-tag. Bumps the
-  # version in package.json, creates a git tag, and pushes back to main.
-  # Triggered when the caller sets release-mode to "release".
+  # ── Release publish ──────────────────────────────────────────────────────
+  # Publishes the version already present in package.json to the "latest"
+  # npm dist-tag. The caller is responsible for bumping the version, creating
+  # the git tag, and pushing before invoking this workflow. This job only
+  # builds and publishes — it performs no git operations.
   publish-release:
     name: Publish release
     needs: changes
     if: needs.changes.outputs.package == 'true' && inputs.release-mode == 'release'
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # needed to push the version bump commit and tag
+      contents: read
       id-token: write  # needed for npm trusted publishing (OIDC)
     outputs:
       new-version: ${{ steps.version.outputs.new-version }}
@@ -173,43 +175,12 @@ jobs:
         working-directory: ${{ inputs.install-path || inputs.package-path }}
         run: pnpm install --frozen-lockfile
 
-      - name: Determine version bump type from PR labels
-        id: bump-type
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Find the PR that was merged into this commit and read its labels.
-          # Falls back to "patch" if no relevant label is found.
-          PR_LABELS=$(gh pr list \
-            --state merged \
-            --base main \
-            --search "${{ github.sha }}" \
-            --json labels \
-            --jq '.[0].labels[].name' 2>/dev/null || true)
-
-          if echo "$PR_LABELS" | grep -q "release:major"; then
-            echo "type=major" >> "$GITHUB_OUTPUT"
-          elif echo "$PR_LABELS" | grep -q "release:minor"; then
-            echo "type=minor" >> "$GITHUB_OUTPUT"
-          else
-            echo "type=patch" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Configure git for version bump commit
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Bump version and create git tag
+      - name: Read version from package.json
         id: version
         working-directory: ${{ inputs.package-path }}
         run: |
-          NEW_VERSION=$(npm version ${{ steps.bump-type.outputs.type }} \
-            --message "chore: release ${{ inputs.package-name }} v%s [skip ci]")
-          echo "new-version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Push version bump commit and tag
-        run: git push origin main --follow-tags
+          VERSION=$(node -p "require('./package.json').version")
+          echo "new-version=v${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Build package
         working-directory: ${{ inputs.package-path }}
