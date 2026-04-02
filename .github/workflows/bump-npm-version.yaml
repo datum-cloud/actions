@@ -20,14 +20,6 @@ on:
         type: number
         description: "Node.js version to use"
         default: 24
-      lockfile-path:
-        required: false
-        type: string
-        description: >
-          Path to pnpm-lock.yaml relative to the repo root.
-          Defaults to "<package-path>/pnpm-lock.yaml".
-          Set to "pnpm-lock.yaml" for monorepos with a root lockfile.
-        default: ""
     outputs:
       new-version:
         description: "The new version after bumping (e.g. `v1.3.0`)"
@@ -48,17 +40,10 @@ jobs:
         with:
           ref: main
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          package_json_file: ${{ inputs.package-path }}/package.json
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
-          cache: pnpm
-          cache-dependency-path: ${{ inputs.lockfile-path || format('{0}/pnpm-lock.yaml', inputs.package-path) }}
 
       - name: Resolve new version
         id: resolve-version
