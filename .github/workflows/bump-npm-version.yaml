@@ -1,0 +1,94 @@
+name: Bump npm Version
+
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        required: true
+        type: string
+        description: "The npm package name (e.g. `@datum-cloud/datum-ui`)"
+      package-path:
+        required: true
+        type: string
+        description: "Path to the package directory relative to the repo root (e.g. `packages/datum-ui`)"
+      bump-type:
+        required: true
+        type: string
+        description: "Version bump type: `major`, `minor`, or `patch`"
+      node-version:
+        required: false
+        type: number
+        description: "Node.js version to use"
+        default: 24
+      lockfile-path:
+        required: false
+        type: string
+        description: >
+          Path to pnpm-lock.yaml relative to the repo root.
+          Defaults to "<package-path>/pnpm-lock.yaml".
+          Set to "pnpm-lock.yaml" for monorepos with a root lockfile.
+        default: ""
+    outputs:
+      new-version:
+        description: "The new version after bumping (e.g. `v1.3.0`)"
+        value: ${{ jobs.bump.outputs.new-version }}
+
+jobs:
+  bump:
+    name: Bump version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      new-version: ${{ steps.resolve-version.outputs.new-version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ${{ inputs.package-path }}/package.json
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.lockfile-path || format('{0}/pnpm-lock.yaml', inputs.package-path) }}
+
+      - name: Resolve new version
+        id: resolve-version
+        working-directory: ${{ inputs.package-path }}
+        env:
+          BUMP_TYPE: ${{ inputs.bump-type }}
+        run: |
+          if [[ "$BUMP_TYPE" != "major" && "$BUMP_TYPE" != "minor" && "$BUMP_TYPE" != "patch" ]]; then
+            echo "::error::Invalid bump-type '$BUMP_TYPE'. Must be one of: major, minor, patch"
+            exit 1
+          fi
+          NEW_VERSION=$(node -e "
+          const v = require('./package.json').version.split('.').map(Number);
+          const t = process.env.BUMP_TYPE;
+          if (t==='major'){v[0]++;v[1]=0;v[2]=0;}
+          else if(t==='minor'){v[1]++;v[2]=0;}
+          else{v[2]++;}
+          console.log(v.join('.'));
+          ")
+          echo "new-version=v${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump version
+        working-directory: ${{ inputs.package-path }}
+        env:
+          BUMP_TYPE: ${{ inputs.bump-type }}
+          PACKAGE_NAME: ${{ inputs.package-name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          npm version "$BUMP_TYPE" --message "chore: release ${PACKAGE_NAME} v%s [skip ci]"
+
+      - name: Push
+        run: git push origin main --follow-tags
