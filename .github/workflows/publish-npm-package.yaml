@@ -95,7 +95,7 @@ jobs:
           package_json_file: ${{ inputs.package-path }}/package.json
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ inputs.node-version }}
           cache: pnpm
@@ -164,7 +164,7 @@ jobs:
           package_json_file: ${{ inputs.package-path }}/package.json
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ inputs.node-version }}
           cache: pnpm
