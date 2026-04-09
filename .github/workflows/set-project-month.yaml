@@ -15,13 +15,11 @@ jobs:
           PROJECT_NUMBER: 60
           PROJECT_ORG: datum-cloud
         run: |
-          # shellcheck disable=SC2016  # GraphQL uses $var syntax inside single-quoted strings; not shell vars
-          # Compute current month label e.g. "April 2026"
           MONTH_LABEL=$(date +'%B %Y')
           echo "Month label: $MONTH_LABEL"
 
           # Get project ID and Month field metadata
-          PROJECT_DATA=$(gh api graphql -f query='
+          FIELDS_QUERY=$(cat <<'GRAPHQL'
             query($org: String!, $number: Int!) {
               organization(login: $org) {
                 projectV2(number: $number) {
@@ -38,7 +36,11 @@ jobs:
                 }
               }
             }
-          ' -f org="$PROJECT_ORG" -F number="$PROJECT_NUMBER")
+GRAPHQL
+          )
+
+          PROJECT_DATA=$(gh api graphql -f query="$FIELDS_QUERY" \
+            -f org="$PROJECT_ORG" -F number="$PROJECT_NUMBER")
 
           PROJECT_ID=$(echo "$PROJECT_DATA" | jq -r '.data.organization.projectV2.id')
           echo "Project ID: $PROJECT_ID"
@@ -66,28 +68,36 @@ jobs:
           echo "Month option ID: $OPTION_ID"
 
           # Get the PR node ID
-          PR_NODE_ID=$(gh api graphql -f query='
+          PR_QUERY=$(cat <<'GRAPHQL'
             query($url: URI!) {
               resource(url: $url) {
                 ... on PullRequest { id }
               }
             }
-          ' -f url="$PR_URL" --jq '.data.resource.id')
+GRAPHQL
+          )
+
+          PR_NODE_ID=$(gh api graphql -f query="$PR_QUERY" \
+            -f url="$PR_URL" --jq '.data.resource.id')
           echo "PR node ID: $PR_NODE_ID"
 
           # Add PR to project (idempotent)
-          ITEM_ID=$(gh api graphql -f query='
+          ADD_QUERY=$(cat <<'GRAPHQL'
             mutation($projectId: ID!, $contentId: ID!) {
               addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
                 item { id }
               }
             }
-          ' -f projectId="$PROJECT_ID" -f contentId="$PR_NODE_ID" \
+GRAPHQL
+          )
+
+          ITEM_ID=$(gh api graphql -f query="$ADD_QUERY" \
+            -f projectId="$PROJECT_ID" -f contentId="$PR_NODE_ID" \
             --jq '.data.addProjectV2ItemById.item.id')
           echo "Project item ID: $ITEM_ID"
 
           # Set the Month field
-          gh api graphql -f query='
+          UPDATE_QUERY=$(cat <<'GRAPHQL'
             mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
               updateProjectV2ItemFieldValue(input: {
                 projectId: $projectId
@@ -98,7 +108,11 @@ jobs:
                 projectV2Item { id }
               }
             }
-          ' -f projectId="$PROJECT_ID" \
+GRAPHQL
+          )
+
+          gh api graphql -f query="$UPDATE_QUERY" \
+            -f projectId="$PROJECT_ID" \
             -f itemId="$ITEM_ID" \
             -f fieldId="$MONTH_FIELD_ID" \
             -f optionId="$OPTION_ID"
