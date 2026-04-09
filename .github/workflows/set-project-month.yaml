@@ -15,6 +15,7 @@ jobs:
           PROJECT_NUMBER: 60
           PROJECT_ORG: datum-cloud
         run: |
+          # shellcheck disable=SC2016  # GraphQL uses $var syntax inside single-quoted strings; not shell vars
           # Compute current month label e.g. "April 2026"
           MONTH_LABEL=$(date +'%B %Y')
           echo "Month label: $MONTH_LABEL"
