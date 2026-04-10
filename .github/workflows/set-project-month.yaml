@@ -8,9 +8,17 @@ jobs:
     name: Set project month field
     runs-on: ubuntu-latest
     steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.DATUM_PROJECT_AUTOMATION_APP_ID }}
+          private-key: ${{ secrets.DATUM_PROJECT_AUTOMATION_PRIVATE_KEY }}
+          owner: datum-cloud
+
       - name: Set month field on project
         env:
-          GH_TOKEN: ${{ secrets.ORG_PROJECT_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           PROJECT_NUMBER: 60
           PROJECT_ORG: datum-cloud
