@@ -62,11 +62,6 @@ jobs:
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@v2.7.5
       
-      - name: Install Kustomize
-        run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-          sudo mv kustomize /usr/local/bin/
-      
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5

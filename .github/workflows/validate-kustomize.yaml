@@ -15,11 +15,6 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    - name: Install Kustomize
-      run: |
-        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
-        sudo mv kustomize /usr/local/bin/
-
     - name: Find and validate Kustomize configurations
       id: validate
       run: |
