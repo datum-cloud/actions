@@ -31,6 +31,11 @@ on:
         type: string
         description: "Comma separated list of target platforms for multi-arch builds"
         default: "linux/amd64"
+      registry-organization:
+        required: false
+        type: string
+        description: "The GitHub organization used in the container registry path (e.g. `milo-os`). Defaults to `datum-cloud`."
+        default: "datum-cloud"
     outputs:
       tag:
         description: "The extracted version tag"
@@ -65,7 +70,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/datum-cloud/${{ inputs.image-name }}
+          images: ghcr.io/${{ inputs.registry-organization }}/${{ inputs.image-name }}
           tags: |
             type=ref,event=pr,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}},prefix=v0.0.0-
             type=ref,event=pr,prefix=v0.0.0-

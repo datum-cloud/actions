@@ -9,6 +9,8 @@ pushes a Docker image to **GitHub Container Registry**.
 
 - **image-name** (required): The name of the docker image (without the registry) that
   should be used (e.g. cloud-portal).
+- **registry-organization** (optional): The GitHub organization used in the container
+  registry path (e.g. `milo-os`). Defaults to `datum-cloud`.
 - **extra-build-args** (optional): Additional build arguments to pass to docker build
   in multiline string format.
 
