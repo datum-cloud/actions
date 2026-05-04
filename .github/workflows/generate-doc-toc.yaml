@@ -1,0 +1,50 @@
+name: Generate Doc TOC
+
+on:
+  workflow_call:
+    inputs:
+      docs-path:
+        description: Path to the directory containing markdown docs
+        type: string
+        default: docs/
+      node-version:
+        description: Node.js version to use
+        type: string
+        default: "20"
+
+permissions:
+  contents: write
+
+jobs:
+  generate-toc:
+    name: Generate TOC
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Install doctoc
+        run: npm install -g doctoc
+
+      - name: Generate TOCs
+        run: doctoc ${{ inputs.docs-path }} --github --title "## Contents"
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ inputs.docs-path }}"
+          if git diff --staged --quiet; then
+            echo "No TOC changes detected."
+          else
+            git commit -m "docs: regenerate table of contents [skip ci]"
+            git push
+          fi
