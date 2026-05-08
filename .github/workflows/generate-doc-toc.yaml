@@ -11,9 +11,22 @@ on:
         description: Node.js version to use
         type: string
         default: "20"
+      branch-name:
+        description: Name of the branch the PR is opened from
+        type: string
+        default: auto/regenerate-doc-toc
+      pr-title:
+        description: Title for the pull request
+        type: string
+        default: "docs: regenerate table of contents"
+      pr-labels:
+        description: Comma-separated labels to apply to the PR
+        type: string
+        default: documentation,automated
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   generate-toc:
@@ -23,8 +36,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -37,14 +48,16 @@ jobs:
       - name: Generate TOCs
         run: doctoc ${{ inputs.docs-path }} --github --title "## Contents"
 
-      - name: Commit changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "${{ inputs.docs-path }}"
-          if git diff --staged --quiet; then
-            echo "No TOC changes detected."
-          else
-            git commit -m "docs: regenerate table of contents [skip ci]"
-            git push
-          fi
+      - name: Open pull request with TOC updates
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: ${{ inputs.branch-name }}
+          commit-message: "docs: regenerate table of contents"
+          title: ${{ inputs.pr-title }}
+          body: |
+            Auto-generated table of contents updates from `doctoc`.
+
+            Triggered by `${{ github.event_name }}` on `${{ github.ref_name }}` (${{ github.sha }}).
+          labels: ${{ inputs.pr-labels }}
+          delete-branch: true
+          sign-commits: true
