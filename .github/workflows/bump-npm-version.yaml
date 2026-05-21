@@ -40,6 +40,12 @@ jobs:
         with:
           ref: main
 
+      # actions/checkout leaves HEAD detached. npm version creates its commit
+      # on HEAD, so we need to be on the main branch ref for that commit to
+      # advance main and get pushed.
+      - name: Switch to main branch
+        run: git checkout main
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -76,4 +82,14 @@ jobs:
           npm version "$BUMP_TYPE" --message "chore: release ${PACKAGE_NAME} v%s [skip ci]"
 
       - name: Push
-        run: git push origin main --follow-tags
+        run: |
+          # Guard: refuse to push if npm version didn't actually advance main.
+          # Prevents silently republishing the previous version downstream.
+          LOCAL=$(git rev-parse HEAD)
+          REMOTE=$(git rev-parse origin/main)
+          if [ "$LOCAL" = "$REMOTE" ]; then
+            echo "::error::npm version did not create a new commit on main; refusing to push a no-op."
+            exit 1
+          fi
+          git push origin main
+          git push origin --tags
