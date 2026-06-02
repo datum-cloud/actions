@@ -2,8 +2,8 @@
 
 The `.github/workflows/nix-update-hash.yaml` reusable GitHub Action
 automatically updates the `vendorHash` in `flake.nix` when Go dependencies
-change. It opens a pull request targeting the branch that triggered the
-workflow, keeping the dependency update and hash fix in the same review.
+change, committing the result directly back to the branch that triggered the
+workflow.
 
 ## Prerequisites
 
@@ -24,18 +24,14 @@ for a reference implementation.
 |---|---|---|---|
 | `go-version-file` | No | `go.mod` | Path to `go.mod`, used by `actions/setup-go` |
 | `task-command` | No | `nix-update-hash` | Task command to run from the calling repo's `Taskfile.yml` |
-| `flake-path` | No | `flake.nix` | Path to `flake.nix` checked for changes after the task runs |
-| `pr-branch` | No | `nix/update-vendorhash` | Head branch for the opened PR (a timestamp suffix is appended) |
+| `flake-path` | No | `flake.nix` | Path to `flake.nix` to check and commit after the task runs |
 | `commit-message` | No | `chore(nix): update vendorHash for go deps` | Commit message |
-| `pr-title` | No | `chore(nix): update vendorHash for go deps` | Pull request title |
-| `pr-body` | No | `Automated vendorHash update for Go module dependency changes.` | Pull request body |
 
 ## Required Permissions
 
 ```yaml
 permissions:
   contents: write
-  pull-requests: write
 ```
 
 ## Usage
@@ -52,7 +48,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   update-hash:
@@ -66,16 +61,15 @@ jobs:
 2. Installs Nix, Go, and Task.
 3. Runs `task <task-command>` — the calling repo's script recomputes
    `vendorHash` and writes it back to `flake.nix`.
-4. Diffs `flake.nix` — if unchanged, the workflow exits cleanly with no PR.
-5. Opens a pull request from a timestamped branch (e.g.
-   `nix/update-vendorhash-20240601-120000`) targeting **the branch that
-   triggered the workflow**. This ensures the hash fix travels with the
-   dependency update in the same PR review rather than landing separately on
-   `main`.
+4. Diffs `flake.nix` — if unchanged, exits cleanly with no commit.
+5. Commits the updated `flake.nix` and pushes directly to the triggering
+   branch, keeping the hash fix in the same branch as the dependency update.
 
 ## Best Practices
 
 - Trigger on `push` with `paths: [go.mod, go.sum]` so the workflow only runs
   when Go dependencies actually change.
 - Use `secrets: inherit` so `GITHUB_TOKEN` is available to both Nix and the
-  `create-pull-request` action.
+  push step.
+- This workflow pushes directly to the triggering branch. Do not trigger it on
+  `main` — `go.mod` changes should always arrive via a pull request branch.
