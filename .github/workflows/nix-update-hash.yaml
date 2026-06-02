@@ -1,0 +1,79 @@
+name: Nix Update VendorHash
+
+on:
+  workflow_call:
+    inputs:
+      go-version-file:
+        description: Path to go.mod used by setup-go
+        type: string
+        default: go.mod
+      task-command:
+        description: Task command to run (must exist in the calling repo's Taskfile.yml)
+        type: string
+        default: nix-update-hash
+      flake-path:
+        description: Path to flake.nix to check for changes
+        type: string
+        default: flake.nix
+      pr-branch:
+        description: Head branch name for the created PR
+        type: string
+        default: nix/update-vendorhash
+      commit-message:
+        description: Commit message for the vendorHash change
+        type: string
+        default: "chore(nix): update vendorHash for go deps"
+      pr-title:
+        description: Pull request title
+        type: string
+        default: "chore(nix): update vendorHash for go deps"
+      pr-body:
+        description: Pull request body
+        type: string
+        default: "Automated vendorHash update for Go module dependency changes."
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-hash:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ inputs.go-version-file }}
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+
+      - name: Update nix vendor hash
+        run: task ${{ inputs.task-command }}
+
+      - name: Check for changes
+        id: git-check
+        run: |
+          git diff --exit-code ${{ inputs.flake-path }} || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        if: steps.git-check.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: ${{ inputs.commit-message }}
+          branch: ${{ inputs.pr-branch }}
+          branch-suffix: timestamp
+          base: ${{ github.ref_name }}
+          title: ${{ inputs.pr-title }}
+          body: ${{ inputs.pr-body }}
