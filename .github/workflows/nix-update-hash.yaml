@@ -15,26 +15,13 @@ on:
         description: Path to flake.nix to check for changes
         type: string
         default: flake.nix
-      pr-branch:
-        description: Head branch name for the created PR
-        type: string
-        default: nix/update-vendorhash
       commit-message:
         description: Commit message for the vendorHash change
         type: string
         default: "chore(nix): update vendorHash for go deps"
-      pr-title:
-        description: Pull request title
-        type: string
-        default: "chore(nix): update vendorHash for go deps"
-      pr-body:
-        description: Pull request body
-        type: string
-        default: "Automated vendorHash update for Go module dependency changes."
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   update-hash:
@@ -61,19 +48,11 @@ jobs:
       - name: Update nix vendor hash
         run: task ${{ inputs.task-command }}
 
-      - name: Check for changes
-        id: git-check
+      - name: Commit and push changes
         run: |
-          git diff --exit-code ${{ inputs.flake-path }} || echo "changed=true" >> $GITHUB_OUTPUT
-
-      - name: Create Pull Request
-        if: steps.git-check.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v8
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: ${{ inputs.commit-message }}
-          branch: ${{ inputs.pr-branch }}
-          branch-suffix: timestamp
-          base: ${{ github.ref_name }}
-          title: ${{ inputs.pr-title }}
-          body: ${{ inputs.pr-body }}
+          git diff --exit-code ${{ inputs.flake-path }} && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ${{ inputs.flake-path }}
+          git commit -m "${{ inputs.commit-message }}"
+          git push
