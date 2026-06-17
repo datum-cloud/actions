@@ -4,6 +4,14 @@ name: Validate Kustomize Configurations
 on:
   # Allow the workflow to be re-used in other repos.
   workflow_call:
+    inputs:
+      load-restrictor:
+        description: >-
+          kustomize --load-restrictor value. Defaults to LoadRestrictionsNone
+          to match Flux's kustomize-controller, so overlays that reference files
+          outside their own directory validate the same way they deploy.
+        type: string
+        default: LoadRestrictionsNone
   push:
     paths:
       - ".github/workflows/*.yaml"
@@ -17,7 +25,11 @@ jobs:
 
     - name: Find and validate Kustomize configurations
       id: validate
+      env:
+        # Empty on push events (workflow_call inputs are unset there); fall back below.
+        LOAD_RESTRICTOR: ${{ inputs.load-restrictor }}
       run: |
+        LOAD_RESTRICTOR="${LOAD_RESTRICTOR:-LoadRestrictionsNone}"
         echo "# Kustomize Validation Results"
         echo ""
         {
@@ -41,7 +53,7 @@ jobs:
         # Test each kustomization
         for dir in ${KUSTOMIZATION_DIRS}; do
           echo "🔍 Validating: ${dir}"
-          if ! OUTPUT=$(kustomize build "${dir}" --enable-helm 2>&1); then
+          if ! OUTPUT=$(kustomize build "${dir}" --enable-helm --load-restrictor "${LOAD_RESTRICTOR}" 2>&1); then
             echo ""
             echo "❌ Error in '${dir}':"
             echo "----------------------------------------"
