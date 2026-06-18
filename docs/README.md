@@ -19,7 +19,15 @@ available for use across the organization.
 - [**Lint GitHub Actions Workflows**](./lint-workflows/) - Validate workflow files using actionlint to catch errors and best practice violations
 - [**Validate Kustomize Configurations**](./validate-kustomize/) - Validate all Kustomize configurations by building them and checking for errors
 
+### Tooling
+
+- [**Setup datumctl**](./setup-datumctl/) - Install datumctl and authenticate a Datum service account for use in subsequent steps (composite action)
+
 ## Usage
+
+Most actions in this repo are reusable *workflows*, referenced via `uses:` at
+the job level. [Setup datumctl](./setup-datumctl/) is a *composite action* —
+add it as a step inside your own job. See its documentation for details.
 
 All workflows are designed to be used as reusable workflows. Reference them in your repository workflows using:
 

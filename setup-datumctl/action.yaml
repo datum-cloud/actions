@@ -1,0 +1,129 @@
+name: Setup datumctl
+description: >-
+  Install datumctl and authenticate a Datum service account so that subsequent
+  datumctl and kubectl steps run against your Datum projects.
+author: Datum Cloud
+
+branding:
+  icon: terminal
+  color: blue
+
+inputs:
+  version:
+    description: >-
+      datumctl version to install, given as a datumctl release tag
+      (e.g. v0.15.0).
+    required: false
+    default: v0.15.0
+  auth-hostname:
+    description: Datum auth server hostname (e.g. auth.datum.net).
+    required: false
+    default: auth.datum.net
+  credentials:
+    description: >-
+      Datum service account credentials JSON. Accepts either the raw JSON or a
+      base64-encoded copy of it. Store it in a secret and pass it here; the
+      value is written to a temporary file (mode 600) and removed after login.
+    required: true
+
+outputs:
+  version:
+    description: The datumctl version that was installed.
+    value: ${{ steps.install.outputs.version }}
+  bin-path:
+    description: Directory datumctl was installed into and added to PATH.
+    value: ${{ steps.install.outputs.bin-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install datumctl
+      id: install
+      shell: bash
+      env:
+        DATUMCTL_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+
+        version="${DATUMCTL_VERSION}"
+        # Release tags carry a leading "v"; checksum file names do not.
+        version_no_v="${version#v}"
+
+        os=$(uname -s)
+        arch=$(uname -m)
+        case "${os}/${arch}" in
+          Linux/x86_64) asset=datumctl_Linux_x86_64.tar.gz ;;
+          Linux/aarch64 | Linux/arm64) asset=datumctl_Linux_arm64.tar.gz ;;
+          Darwin/arm64) asset=datumctl_Darwin_arm64.tar.gz ;;
+          Darwin/x86_64) asset=datumctl_Darwin_x86_64.tar.gz ;;
+          *)
+            echo "::error::unsupported platform: ${os}/${arch}" >&2
+            exit 1
+            ;;
+        esac
+
+        base="https://github.com/datum-cloud/datumctl/releases/download/${version}"
+        tmp=$(mktemp -d)
+        trap 'rm -rf "${tmp}"' EXIT
+
+        echo "Downloading datumctl ${version} (${asset})"
+        curl -fsSL -o "${tmp}/${asset}" "${base}/${asset}"
+        curl -fsSL -o "${tmp}/checksums.txt" \
+          "${base}/datumctl_${version_no_v}_checksums.txt"
+
+        # Verify the download against the published checksum before extracting.
+        expected=$(grep " ${asset}\$" "${tmp}/checksums.txt" | awk '{print $1}')
+        if [ -z "${expected}" ]; then
+          echo "::error::no checksum found for ${asset} in release ${version}" >&2
+          exit 1
+        fi
+        if command -v sha256sum >/dev/null 2>&1; then
+          actual=$(sha256sum "${tmp}/${asset}" | awk '{print $1}')
+        else
+          actual=$(shasum -a 256 "${tmp}/${asset}" | awk '{print $1}')
+        fi
+        if [ "${expected}" != "${actual}" ]; then
+          echo "::error::checksum mismatch for ${asset}: expected ${expected}, got ${actual}" >&2
+          exit 1
+        fi
+
+        tar -xzf "${tmp}/${asset}" -C "${tmp}" datumctl
+
+        bindir="${RUNNER_TEMP}/datumctl-bin"
+        mkdir -p "${bindir}"
+        install "${tmp}/datumctl" "${bindir}/datumctl"
+
+        # Put datumctl on PATH for the rest of the job.
+        echo "${bindir}" >>"${GITHUB_PATH}"
+
+        echo "version=${version}" >>"${GITHUB_OUTPUT}"
+        echo "bin-path=${bindir}" >>"${GITHUB_OUTPUT}"
+        "${bindir}/datumctl" version || true
+
+    - name: Authenticate service account
+      shell: bash
+      env:
+        DATUM_SA_CREDENTIALS: ${{ inputs.credentials }}
+        DATUM_AUTH_HOSTNAME: ${{ inputs.auth-hostname }}
+      run: |
+        set -euo pipefail
+
+        : "${DATUM_SA_CREDENTIALS:?service account credentials are required}"
+        : "${DATUM_AUTH_HOSTNAME:?auth hostname is required}"
+
+        creds_file=$(mktemp)
+        trap 'rm -f "${creds_file}"' EXIT
+        chmod 600 "${creds_file}"
+
+        # Tolerate both raw-JSON and base64-encoded credentials. Decode only
+        # when the result is valid base64 *and* looks like JSON; otherwise treat
+        # the input as raw JSON.
+        if printf '%s' "${DATUM_SA_CREDENTIALS}" | base64 -d >"${creds_file}" 2>/dev/null \
+          && head -c1 "${creds_file}" | grep -q '{'; then
+          :
+        else
+          printf '%s' "${DATUM_SA_CREDENTIALS}" >"${creds_file}"
+        fi
+
+        datumctl login --credentials "${creds_file}" --hostname "${DATUM_AUTH_HOSTNAME}"
+        datumctl auth list

@@ -98,6 +98,28 @@ Validates workflow YAML files using actionlint. Runs automatically on workflow f
 
 Finds and validates all `kustomization.yaml` files in the repository using `kustomize build --enable-helm`.
 
+### 6. Setup datumctl (`setup-datumctl/action.yaml`)
+
+Composite action (not a reusable workflow) that installs `datumctl` and authenticates a Datum service account. Used as a step inside a job, like `google-github-actions/setup-gcloud`.
+
+**Inputs:**
+- `version` (optional, default `v0.15.0`): datumctl release tag to install
+- `auth-hostname` (optional, default `auth.datum.net`): Datum auth server hostname
+- `credentials` (required): service account credentials JSON, raw or base64-encoded
+
+**Outputs:**
+- `version`: installed datumctl version
+- `bin-path`: directory datumctl was installed into and added to `PATH`
+
+Installs the released tarball for the runner's OS/arch (Linux/macOS, x86_64/arm64), verifies the SHA-256 checksum, places the binary on `PATH` without `sudo`, then logs in. The login session lives in the datumctl keyring for subsequent `datumctl`/`kubectl` steps.
+
+**Usage:**
+```yaml
+- uses: datum-cloud/actions/setup-datumctl@v1
+  with:
+    credentials: ${{ secrets.DATUM_SA_CREDENTIALS }}
+```
+
 ## Common Development Commands
 
 ### Linting Workflows
