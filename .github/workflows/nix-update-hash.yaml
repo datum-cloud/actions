@@ -43,7 +43,7 @@ jobs:
           go-version-file: ${{ inputs.go-version-file }}
 
       - name: Install Task
-        uses: arduino/setup-task@v2
+        uses: arduino/setup-task@v3.0.0
 
       - name: Update nix vendor hash
         run: task ${{ inputs.task-command }}
