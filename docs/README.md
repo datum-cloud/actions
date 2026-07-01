@@ -13,6 +13,7 @@ available for use across the organization.
 
 - [**Publish Docker Images**](./publish-docker/) - Build and push Docker images to GitHub Container Registry
 - [**Publish Kustomize Bundle**](./publish-kustomize-bundle/) - Build and push Kustomize bundles to GitHub Container Registry
+- [**Update Plugin Index**](./update-plugin-index/) - Open a PR against a datumctl plugin catalog to bump a plugin manifest to a new release, refreshing version, URLs, and checksums
 
 ### Validation & Linting
 

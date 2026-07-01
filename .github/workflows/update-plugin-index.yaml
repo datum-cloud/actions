@@ -1,0 +1,195 @@
+name: Update Plugin Index
+
+# Opens a pull request against a datumctl plugin catalog (index repo) that bumps
+# a single plugin's manifest to a newly published release: it sets spec.version
+# and, for every platform entry, rewrites the download URI to point at the new
+# tag and refreshes the sha256 from that release's checksums.txt.
+#
+# The archive-name -> platform mapping is driven entirely off the basenames of
+# the manifest's EXISTING platforms[].uri values, so this workflow works for any
+# plugin whose release ships a checksums.txt (one `<sha256>  <filename>` per
+# line) alongside per-platform archives. Nothing about a specific plugin (name,
+# prefix, archive layout) is hardcoded.
+#
+# Regenerating index.yaml is intentionally left to the index repo's own
+# generator, which reconciles index.yaml from plugins/*.yaml on merge to its
+# default branch. This workflow only edits plugins/<plugin>.yaml.
+
+on:
+  workflow_call:
+    inputs:
+      index-repo:
+        required: true
+        type: string
+        description: "The plugin catalog repository to open the PR against (e.g. `milo-os/cli-plugins`)."
+      plugin-name:
+        required: true
+        type: string
+        description: "The plugin's short name, used to locate its manifest and label the PR (e.g. `ipam`)."
+      plugin-file:
+        required: false
+        type: string
+        description: "Path to the plugin manifest within the index repo. Defaults to `plugins/<plugin-name>.yaml`."
+        default: ""
+      version:
+        required: true
+        type: string
+        description: "The release tag to publish, including the leading `v` (e.g. `v0.2.0`)."
+      release-repo:
+        required: false
+        type: string
+        description: "The repository that published the release assets. Defaults to the calling repository."
+        default: ""
+      base-branch:
+        required: false
+        type: string
+        description: "Branch in the index repo to base the PR on. Defaults to `main`."
+        default: "main"
+    secrets:
+      PLUGIN_INDEX_TOKEN:
+        required: true
+        description: >-
+          Token with contents:write and pull-requests:write permission on
+          `index-repo`. A caller's built-in GITHUB_TOKEN is scoped to its own
+          repository and cannot push a branch or open a PR on the index repo,
+          so a cross-repo credential (a PAT or a GitHub App installation token)
+          is required.
+
+jobs:
+  update-plugin-index:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve inputs
+        id: cfg
+        run: |
+          plugin_file='${{ inputs.plugin-file }}'
+          if [ -z "$plugin_file" ]; then
+            plugin_file="plugins/${{ inputs.plugin-name }}.yaml"
+          fi
+          release_repo='${{ inputs.release-repo }}'
+          if [ -z "$release_repo" ]; then
+            release_repo='${{ github.repository }}'
+          fi
+          {
+            echo "plugin-file=$plugin_file"
+            echo "release-repo=$release_repo"
+          } >> "$GITHUB_OUTPUT"
+
+      # The release assets live in the calling repository, so the built-in
+      # GITHUB_TOKEN (scoped to that repo) is the right credential here. Fails
+      # loudly if checksums.txt is not among the release assets.
+      - name: Download checksums.txt from the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p _release
+          if ! gh release download "${{ inputs.version }}" \
+              --repo "${{ steps.cfg.outputs.release-repo }}" \
+              --pattern "checksums.txt" \
+              --dir _release; then
+            echo "::error::checksums.txt not found for ${{ steps.cfg.outputs.release-repo }}@${{ inputs.version }}"
+            exit 1
+          fi
+          echo "Downloaded checksums.txt:"
+          cat _release/checksums.txt
+
+      - name: Check out index repo
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.index-repo }}
+          ref: ${{ inputs.base-branch }}
+          token: ${{ secrets.PLUGIN_INDEX_TOKEN }}
+          path: index-repo
+
+      - name: Update plugin manifest
+        env:
+          PLUGIN_FILE: ${{ steps.cfg.outputs.plugin-file }}
+          RELEASE_REPO: ${{ steps.cfg.outputs.release-repo }}
+          VERSION: ${{ inputs.version }}
+          CHECKSUMS: ${{ github.workspace }}/_release/checksums.txt
+        run: |
+          python3 -m pip install --quiet "ruamel.yaml>=0.18"
+          python3 - <<'PY'
+          import os, sys
+          from ruamel.yaml import YAML
+
+          version = os.environ["VERSION"]
+          release_repo = os.environ["RELEASE_REPO"]
+          plugin_file = os.path.join("index-repo", os.environ["PLUGIN_FILE"])
+          checksums_path = os.environ["CHECKSUMS"]
+
+          # checksums.txt: one "<sha256>  <filename>" per line. Key by basename
+          # so it matches the archive basenames taken from the manifest URIs.
+          sums = {}
+          with open(checksums_path) as fh:
+              for line in fh:
+                  line = line.strip()
+                  if not line:
+                      continue
+                  parts = line.split()
+                  if len(parts) != 2:
+                      print(f"::error::malformed checksums.txt line: {line!r}")
+                      sys.exit(1)
+                  sha, name = parts
+                  sums[os.path.basename(name)] = sha
+
+          if not os.path.exists(plugin_file):
+              print(f"::error::plugin manifest not found: {plugin_file}")
+              sys.exit(1)
+
+          yaml = YAML()
+          yaml.preserve_quotes = True
+          # Match the catalog's hand-authored style: 4-space sequence indent
+          # with a 2-space dash offset, and never fold long download URLs.
+          yaml.indent(mapping=2, sequence=4, offset=2)
+          yaml.width = 4096
+          with open(plugin_file) as fh:
+              doc = yaml.load(fh)
+
+          doc["spec"]["version"] = version
+
+          missing = []
+          for platform in doc["spec"]["platforms"]:
+              # The existing URI basename is the archive name. It is stable
+              # across releases (goreleaser archive names carry no version), so
+              # this mapping is fully generic and never hardcodes a plugin.
+              basename = platform["uri"].rsplit("/", 1)[-1]
+              platform["uri"] = (
+                  f"https://github.com/{release_repo}/releases/download/{version}/{basename}"
+              )
+              if basename not in sums:
+                  missing.append(basename)
+                  continue
+              platform["sha256"] = sums[basename]
+
+          if missing:
+              print("::error::archives missing from checksums.txt: " + ", ".join(missing))
+              print("available assets: " + ", ".join(sorted(sums)))
+              sys.exit(1)
+
+          with open(plugin_file, "w") as fh:
+              yaml.dump(doc, fh)
+
+          print(f"Updated {plugin_file} to {version} across {len(doc['spec']['platforms'])} platform(s)")
+          PY
+
+          echo "=== Resulting manifest ==="
+          cat "index-repo/${PLUGIN_FILE}"
+
+      - name: Open pull request against index repo
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.PLUGIN_INDEX_TOKEN }}
+          path: index-repo
+          base: ${{ inputs.base-branch }}
+          branch: update-plugin/${{ inputs.plugin-name }}-${{ inputs.version }}
+          commit-message: "Update ${{ inputs.plugin-name }} plugin to ${{ inputs.version }}"
+          title: "Update ${{ inputs.plugin-name }} plugin to ${{ inputs.version }}"
+          body: |
+            Updates the `${{ inputs.plugin-name }}` plugin manifest to release **${{ inputs.version }}** of `${{ steps.cfg.outputs.release-repo }}`.
+
+            Every platform's download URL now points at the `${{ inputs.version }}` release assets, and each `sha256` was refreshed from that release's `checksums.txt`. Catalog CI will validate the schema, resolve each URL, and verify each checksum.
+
+            The catalog `index.yaml` is regenerated automatically from `plugins/*.yaml` when this merges.
