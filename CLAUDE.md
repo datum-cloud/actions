@@ -98,9 +98,9 @@ Validates workflow YAML files using actionlint. Runs automatically on workflow f
 
 Finds and validates all `kustomization.yaml` files in the repository using `kustomize build --enable-helm`.
 
-### 6. Update Plugin Index (`.github/workflows/update-plugin-index.yaml`)
+### 6. Update Plugin Index (`update-plugin-index/action.yml` — composite action)
 
-Opens a PR against a datumctl plugin catalog (index repo) that bumps a plugin's manifest to a newly published release — setting `spec.version`, rewriting each platform's download `uri` to the new tag, and refreshing each `sha256` from the release's `checksums.txt`.
+Opens a PR against a datumctl plugin catalog (index repo) that bumps a plugin's manifest to a newly published release — setting `spec.version`, rewriting each platform's download `uri` to the new tag, and refreshing each `sha256` from the release's `checksums.txt`. It is a **composite action** (not a reusable workflow) so the caller mints the cross-repo token and runs this in the same job — a GitHub App token doesn't survive being passed across jobs.
 
 **Inputs:**
 - `index-repo` (required): Catalog repo to open the PR against (e.g. `milo-os/cli-plugins`)
@@ -109,9 +109,7 @@ Opens a PR against a datumctl plugin catalog (index repo) that bumps a plugin's 
 - `version` (required): Release tag including leading `v` (e.g. `v0.2.0`)
 - `release-repo` (optional): Repo that published the release assets (default: calling repo)
 - `base-branch` (optional): Index repo branch to base the PR on (default `main`)
-
-**Secrets:**
-- `PLUGIN_INDEX_TOKEN` (required): PAT / GitHub App token with `contents:write` + `pull-requests:write` on `index-repo`. The built-in `GITHUB_TOKEN` cannot push or open a PR cross-repo.
+- `token` (required): PAT / GitHub App token with `contents:write` + `pull-requests:write` on `index-repo`, minted in the same job. The built-in `GITHUB_TOKEN` cannot push or open a PR cross-repo.
 
 The archive→checksum mapping is driven off the basenames of the manifest's existing `platforms[].uri` values, so it works for any plugin. Regenerating `index.yaml` is left to the index repo's own generator. See [`docs/update-plugin-index/`](docs/update-plugin-index/README.md).
 
