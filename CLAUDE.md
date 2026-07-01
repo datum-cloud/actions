@@ -98,6 +98,23 @@ Validates workflow YAML files using actionlint. Runs automatically on workflow f
 
 Finds and validates all `kustomization.yaml` files in the repository using `kustomize build --enable-helm`.
 
+### 6. Update Plugin Index (`.github/workflows/update-plugin-index.yaml`)
+
+Opens a PR against a datumctl plugin catalog (index repo) that bumps a plugin's manifest to a newly published release — setting `spec.version`, rewriting each platform's download `uri` to the new tag, and refreshing each `sha256` from the release's `checksums.txt`.
+
+**Inputs:**
+- `index-repo` (required): Catalog repo to open the PR against (e.g. `milo-os/cli-plugins`)
+- `plugin-name` (required): Plugin short name (e.g. `ipam`)
+- `plugin-file` (optional): Manifest path in the index repo (default `plugins/<plugin-name>.yaml`)
+- `version` (required): Release tag including leading `v` (e.g. `v0.2.0`)
+- `release-repo` (optional): Repo that published the release assets (default: calling repo)
+- `base-branch` (optional): Index repo branch to base the PR on (default `main`)
+
+**Secrets:**
+- `PLUGIN_INDEX_TOKEN` (required): PAT / GitHub App token with `contents:write` + `pull-requests:write` on `index-repo`. The built-in `GITHUB_TOKEN` cannot push or open a PR cross-repo.
+
+The archive→checksum mapping is driven off the basenames of the manifest's existing `platforms[].uri` values, so it works for any plugin. Regenerating `index.yaml` is left to the index repo's own generator. See [`docs/update-plugin-index/`](docs/update-plugin-index/README.md).
+
 ## Common Development Commands
 
 ### Linting Workflows
