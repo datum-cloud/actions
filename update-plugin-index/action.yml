@@ -183,8 +183,10 @@ runs:
         commit-message: "Update ${{ inputs.plugin-name }} plugin to ${{ inputs.version }}"
         title: "Update ${{ inputs.plugin-name }} plugin to ${{ inputs.version }}"
         body: |
-          Updates the `${{ inputs.plugin-name }}` plugin manifest to release **${{ inputs.version }}** of `${{ steps.cfg.outputs.release-repo }}`.
+          Updates the `${{ inputs.plugin-name }}` plugin manifest to release **[${{ inputs.version }}](https://github.com/${{ steps.cfg.outputs.release-repo }}/releases/tag/${{ inputs.version }})** of `${{ steps.cfg.outputs.release-repo }}`.
 
           Every platform's download URL now points at the `${{ inputs.version }}` release assets, and each `sha256` was refreshed from that release's `checksums.txt`. Catalog CI will validate the schema, resolve each URL, and verify each checksum.
 
           The catalog `index.yaml` is regenerated automatically from `plugins/*.yaml` when this merges.
+
+          **What's in this release:** https://github.com/${{ steps.cfg.outputs.release-repo }}/releases/tag/${{ inputs.version }}
