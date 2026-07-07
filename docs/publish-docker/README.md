@@ -13,6 +13,12 @@ pushes a Docker image to **GitHub Container Registry**.
   registry path (e.g. `milo-os`). Defaults to `datum-cloud`.
 - **extra-build-args** (optional): Additional build arguments to pass to docker build
   in multiline string format.
+- **build-secrets** (optional): BuildKit build secrets to expose to the build, in
+  docker/build-push-action `id=value` multiline format (e.g.
+  `unikraft-apt-auth=${{ secrets.UNIKRAFT_APT_AUTH }}`). Consume them in the Dockerfile
+  with `RUN --mount=type=secret,id=unikraft-apt-auth ...`. Unlike build-args, secrets
+  are never written into image layers or history, so use this for credentials
+  (registry/apt auth, tokens) rather than `extra-build-args`.
 
 ### Automatic Build Arguments
 
