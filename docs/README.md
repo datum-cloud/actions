@@ -12,7 +12,8 @@ available for use across the organization.
 ### Publishing & Distribution
 
 - [**Publish Docker Images**](./publish-docker/) - Build and push Docker images to GitHub Container Registry
-- [**Publish Kustomize Bundle**](./publish-kustomize-bundle/) - Build and push Kustomize bundles to GitHub Container Registry
+- [**Publish Kustomize Bundle**](./publish-kustomize-bundle/) - Build and push Kustomize bundles to GitHub Container Registry (reusable workflow, single-image)
+- [**Publish Kustomize Bundle (composite)**](../publish-kustomize-bundle/) - Stamp multiple images into one bundle and push it, from within the caller's job
 - [**Update Plugin Index**](./update-plugin-index/) - Open a PR against a datumctl plugin catalog to bump a plugin manifest to a new release, refreshing version, URLs, and checksums
 
 ### Validation & Linting
