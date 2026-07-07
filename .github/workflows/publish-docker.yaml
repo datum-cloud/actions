@@ -36,6 +36,23 @@ on:
         type: string
         description: "The GitHub organization used in the container registry path (e.g. `milo-os`). Defaults to `datum-cloud`."
         default: "datum-cloud"
+    secrets:
+      build-secrets:
+        required: false
+        description: >-
+          BuildKit build secrets to expose to the build, in
+          docker/build-push-action id=value multiline format. Passed as a
+          secret (not an input) so the caller sets it under the job's
+          `secrets:` block with a real secret reference -- GitHub does not allow
+          the `secrets` context in a reusable-workflow `with:`. Wrap each
+          id=value entry in double quotes so a multi-line credential (like an
+          apt auth.conf) is not split on newlines. Consume them in the
+          Dockerfile with `RUN --mount=type=secret,id=<name> ...`. Unlike
+          build-args, secrets are never persisted into image layers or history,
+          so use this for credentials (registry/apt auth, tokens).
+      SENTRY_AUTH_TOKEN:
+        required: false
+        description: "Sentry auth token, forwarded as the SENTRY_AUTH_TOKEN build-arg when set."
     outputs:
       tag:
         description: "The extracted version tag"
@@ -120,3 +137,4 @@ jobs:
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
             ${{ inputs.extra-build-args }}
+          secrets: ${{ secrets.build-secrets }}

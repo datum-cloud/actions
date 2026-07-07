@@ -14,6 +14,19 @@ pushes a Docker image to **GitHub Container Registry**.
 - **extra-build-args** (optional): Additional build arguments to pass to docker build
   in multiline string format.
 
+### Secrets
+
+Pass secrets under the caller job's `secrets:` block, not `with:` — GitHub does
+not allow the `secrets` context in a reusable-workflow `with:`.
+
+- **build-secrets** (optional): BuildKit build secrets to expose to the build, in
+  docker/build-push-action `id=value` multiline format. Quote each entry (e.g.
+  `"unikraft-apt-auth=${{ secrets.UNIKRAFT_APT_AUTH }}"`) so a multi-line credential
+  such as an apt `auth.conf` is not split on newlines. Consume them in the Dockerfile
+  with `RUN --mount=type=secret,id=unikraft-apt-auth ...`. Unlike build-args, secrets
+  are never written into image layers or history, so use this for credentials
+  (registry/apt auth, tokens) rather than `extra-build-args`.
+
 ### Automatic Build Arguments
 
 The workflow automatically provides the following build arguments to your Dockerfile:
@@ -86,4 +99,30 @@ jobs:
         CUSTOM_ARG=value
         ANOTHER_ARG=${{ github.run_number }}
     secrets: inherit
+```
+
+#### Passing Build Secrets
+
+Credentials the build needs (registry/apt auth, tokens) go under the caller's
+`secrets:` block. Quote each entry so a multi-line value (e.g. an apt
+`auth.conf`) is not split on newlines. A named `secrets:` block cannot be
+combined with `secrets: inherit` in the same job, so pass any other secrets the
+build needs explicitly.
+
+```yaml
+name: Publish Docker Image
+
+on:
+  push:
+  release:
+    types: ['published']
+
+jobs:
+  publish:
+    uses: datum-cloud/actions/.github/workflows/publish-docker.yaml@v1
+    with:
+      image-name: my-app
+    secrets:
+      build-secrets: |
+        "my-registry-auth=${{ secrets.MY_REGISTRY_AUTH }}"
 ```
