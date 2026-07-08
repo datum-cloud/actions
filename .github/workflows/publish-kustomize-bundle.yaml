@@ -11,15 +11,29 @@ on:
         required: true
         type: string
         description: "The path to the bundle that should be used, relative to the root of the repository (e.g. `config/crds`)"
+      images:
+        required: false
+        type: string
+        description: |
+          Multi-line YAML list of images to stamp into the bundle, one
+          `{ path, name, tag }` entry each. `path` is a kustomization directory
+          (relative to the repo root) to run `kustomize edit set image` in,
+          `name` is the image to rewrite, and `tag` is optional — when omitted
+          the entry falls back to the version of the bundle's first computed
+          tag. Supersedes `image-name`/`image-overlays` when set. Example:
+            images: |
+              - { path: config/default, name: ghcr.io/datum-cloud/unikraft-provider, tag: "v0.0.0-pr-1-abc" }
+              - { path: config/dependencies/ukp-runtime, name: ghcr.io/datum-cloud/ukp-runtime }
+        default: ""
       image-overlays:
         required: false
         type: string
-        description: "Comma-separated list of overlay paths where images should be set (e.g. 'config/base,config/apiserver,config/controller-manager')"
+        description: "Comma-separated list of overlay paths where a single image should be set (e.g. 'config/base,config/apiserver,config/controller-manager'). Ignored when `images` is provided."
         default: ""
       image-name:
         required: false
         type: string
-        description: "The image name to set (e.g. 'ghcr.io/datum-cloud/datum-net')"
+        description: "The single image name to set (e.g. 'ghcr.io/datum-cloud/datum-net'). Ignored when `images` is provided."
         default: ""
       debug:
         required: false
@@ -77,8 +91,63 @@ jobs:
             type=semver,pattern=v{{major}}
             type=sha,prefix=v0.0.0-
 
+      - name: Set Image Tags from images list
+        if: ${{ inputs.images != '' }}
+        env:
+          IMAGES: ${{ inputs.images }}
+          BUNDLE_TAGS: ${{ steps.meta.outputs.tags }}
+          BUNDLE_PATH: ${{ inputs.bundle-path }}
+          DEBUG: ${{ inputs.debug }}
+        run: |
+          set -euo pipefail
+
+          # Default tag for entries that don't pin their own: the version portion
+          # of the bundle's first computed tag (mirrors the single-image path).
+          DEFAULT_TAG="$(printf '%s\n' "$BUNDLE_TAGS" | head -n1 | cut -d':' -f2)"
+          echo "Default image tag (bundle first tag): ${DEFAULT_TAG}"
+
+          STAMPED_PATHS=()
+          # yq turns the YAML list into one compact-JSON object per line; jq reads
+          # each field. `.tag // ""` yields "" when the entry omits a tag.
+          while IFS= read -r entry; do
+            [ -n "$entry" ] || continue
+
+            path="$(printf '%s' "$entry" | jq -r '.path')"
+            name="$(printf '%s' "$entry" | jq -r '.name')"
+            tag="$(printf '%s' "$entry" | jq -r '.tag // ""')"
+            [ -n "$tag" ] || tag="$DEFAULT_TAG"
+
+            full_path="${GITHUB_WORKSPACE}/${path}"
+            if [ ! -f "${full_path}/kustomization.yaml" ]; then
+              echo "::error::${full_path}/kustomization.yaml not found"
+              exit 1
+            fi
+
+            echo "Setting image ${name}:${tag} in ${path}"
+            ( cd "${full_path}" && kustomize edit set image "${name}=${name}:${tag}" )
+            STAMPED_PATHS+=("${full_path}")
+          done < <(printf '%s\n' "$IMAGES" | yq -o=json -I=0 '.[]')
+
+          if [ "${#STAMPED_PATHS[@]}" -eq 0 ]; then
+            echo "::error::no images were parsed from the 'images' input"
+            exit 1
+          fi
+
+          # Ensure the edits are flushed before the publish step reads them.
+          sync
+
+          if [ "${DEBUG}" = "true" ]; then
+            echo "=== Stamped images: blocks ==="
+            for full_path in "${STAMPED_PATHS[@]}"; do
+              echo "--- ${full_path}/kustomization.yaml ---"
+              yq '.images' "${full_path}/kustomization.yaml"
+            done
+            echo "=== Bundle structure at ${BUNDLE_PATH} ==="
+            find "${GITHUB_WORKSPACE}/${BUNDLE_PATH}" -type f | sort
+          fi
+
       - name: Set Image Tags in Kustomize Overlays
-        if: ${{ inputs.image-overlays != '' && inputs.image-name != '' }}
+        if: ${{ inputs.images == '' && inputs.image-overlays != '' && inputs.image-name != '' }}
         run: |
           # Extract the first tag
           TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1 | cut -d':' -f2)
