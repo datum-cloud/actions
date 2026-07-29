@@ -200,3 +200,6 @@ RUN go build -ldflags="-X k8s.io/component-base/version.gitVersion=${VERSION} \
 - `.github/workflows/` - Reusable GitHub Actions workflow definitions
 - `docs/` - Documentation for each action with usage examples and best practices
 - `renovate.json` - Renovate configuration for dependency updates
+## GitHub PR / Issue / Comment Conventions
+
+Follow the `datum-platform:pr-conventions` skill for all PRs, issues, and comments — including its concision rules: say it once (don't restate the summary as test-plan checkboxes, or describe the same behaviour in prose and again in a checklist), and cut every word carrying no fact. Compress, never omit — brevity must not drop facts.
