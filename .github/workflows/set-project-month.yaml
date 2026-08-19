@@ -1,11 +1,11 @@
-name: Set Project Month
+name: Set Project Iteration
 
 on:
   workflow_call:
 
 jobs:
-  set-month:
-    name: Set project month field
+  set-iteration:
+    name: Set project iteration field
     runs-on: ubuntu-latest
     steps:
       - name: Generate GitHub App token
@@ -16,7 +16,7 @@ jobs:
           private-key: ${{ secrets.DATUM_PROJECT_AUTOMATION_PRIVATE_KEY }}
           owner: datum-cloud
 
-      - name: Set month field on project
+      - name: Set iteration field on project
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -29,10 +29,13 @@ jobs:
                   id
                   fields(first: 30) {
                     nodes {
-                      ... on ProjectV2SingleSelectField {
+                      ... on ProjectV2IterationField {
                         id
                         name
-                        options { id name }
+                        configuration {
+                          iterations { id title startDate duration }
+                          completedIterations { id title startDate duration }
+                        }
                       }
                     }
                   }
@@ -52,19 +55,19 @@ jobs:
               }
             }
           UPDATE_QUERY: |
-            mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+            mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $iterationId: String!) {
               updateProjectV2ItemFieldValue(input: {
                 projectId: $projectId
                 itemId: $itemId
                 fieldId: $fieldId
-                value: { singleSelectOptionId: $optionId }
+                value: { iterationId: $iterationId }
               }) {
                 projectV2Item { id }
               }
             }
         run: |
-          MONTH_LABEL=$(date +'%B %Y')
-          echo "Month label: $MONTH_LABEL"
+          TODAY=$(date +%Y-%m-%d)
+          echo "Today: $TODAY"
 
           PROJECT_DATA=$(gh api graphql -f query="$FIELDS_QUERY" \
             -f org="$PROJECT_ORG" -F number="$PROJECT_NUMBER")
@@ -72,17 +75,30 @@ jobs:
           PROJECT_ID=$(echo "$PROJECT_DATA" | jq -r '.data.organization.projectV2.id')
           echo "Project ID: $PROJECT_ID"
 
-          MONTH_FIELD_ID=$(echo "$PROJECT_DATA" | jq -r '.data.organization.projectV2.fields.nodes[] | select(.name == "Month") | .id')
-          echo "Month field ID: $MONTH_FIELD_ID"
+          ITERATION_FIELD_ID=$(echo "$PROJECT_DATA" | jq -r '.data.organization.projectV2.fields.nodes[] | select(.name == "Iteration") | .id')
+          echo "Iteration field ID: $ITERATION_FIELD_ID"
 
-          OPTION_ID=$(echo "$PROJECT_DATA" | jq -r --arg label "$MONTH_LABEL" '.data.organization.projectV2.fields.nodes[] | select(.name == "Month") | .options[] | select(.name == $label) | .id')
+          ALL_ITERATIONS=$(echo "$PROJECT_DATA" | jq -c '.data.organization.projectV2.fields.nodes[] | select(.name == "Iteration") | (.configuration.iterations + .configuration.completedIterations)')
 
-          if [ -z "$OPTION_ID" ]; then
-            echo "No Month option found for '$MONTH_LABEL' — skipping."
-            echo "Add a '$MONTH_LABEL' option to the Month field in project $PROJECT_NUMBER to enable automation."
+          ITERATION_ID=""
+          ITERATION_TITLE=""
+          while IFS= read -r iter; do
+            START=$(echo "$iter" | jq -r '.startDate')
+            DURATION=$(echo "$iter" | jq -r '.duration')
+            END=$(date -d "$START + $DURATION days" +%Y-%m-%d)
+            if [[ "$TODAY" > "$START" || "$TODAY" == "$START" ]] && [[ "$TODAY" < "$END" ]]; then
+              ITERATION_ID=$(echo "$iter" | jq -r '.id')
+              ITERATION_TITLE=$(echo "$iter" | jq -r '.title')
+              break
+            fi
+          done < <(echo "$ALL_ITERATIONS" | jq -c '.[]')
+
+          if [ -z "$ITERATION_ID" ]; then
+            echo "No iteration found covering $TODAY — skipping."
+            echo "Add an iteration covering today's date to the Iteration field in project $PROJECT_NUMBER to enable automation."
             exit 0
           fi
-          echo "Month option ID: $OPTION_ID"
+          echo "Iteration: $ITERATION_TITLE ($ITERATION_ID)"
 
           PR_NODE_ID=$(gh api graphql -f query="$PR_QUERY" \
             -f url="$PR_URL" --jq '.data.resource.id')
@@ -96,7 +112,7 @@ jobs:
           gh api graphql -f query="$UPDATE_QUERY" \
             -f projectId="$PROJECT_ID" \
             -f itemId="$ITEM_ID" \
-            -f fieldId="$MONTH_FIELD_ID" \
-            -f optionId="$OPTION_ID"
+            -f fieldId="$ITERATION_FIELD_ID" \
+            -f iterationId="$ITERATION_ID"
 
-          echo "Done — PR added to project $PROJECT_NUMBER with Month = $MONTH_LABEL"
+          echo "Done — PR added to project $PROJECT_NUMBER with Iteration = $ITERATION_TITLE"
