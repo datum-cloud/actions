@@ -21,7 +21,7 @@ The workflow automatically injects these build arguments:
 - `VERSION`: Semver-compliant version generated from git tags/branches/commits
 - `GIT_COMMIT`: Full commit SHA
 - `GIT_TREE_STATE`: Set to `clean`
-- `BUILD_DATE`: Commit timestamp
+- `BUILD_DATE`: Build time, ISO8601 in UTC (e.g. `2026-08-26T22:03:21Z`)
 - `SENTRY_AUTH_TOKEN`: From secrets (optional)
 
 **Version Tag Logic:**
