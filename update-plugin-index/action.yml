@@ -90,7 +90,7 @@ runs:
         cat _release/checksums.txt
 
     - name: Check out index repo
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       with:
         repository: ${{ inputs.index-repo }}
         ref: ${{ inputs.base-branch }}
