@@ -5,10 +5,6 @@ available for use across the organization.
 
 ## Available Actions
 
-### Security & Compliance
-
-- [**Snyk Security Scan**](./snyk-scan/) - Comprehensive security vulnerability scanning for dependencies, IaC, containers, and code using Snyk
-
 ### Publishing & Distribution
 
 - [**Publish Docker Images**](./publish-docker/) - Build and push Docker images to GitHub Container Registry
