@@ -19,5 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Lint Bash scripts
+        run: shellcheck update-plugin-index/*.sh
       - name: Run regression tests
-        run: python3 -m unittest discover -s update-plugin-index -p 'test_*.py' -v
+        run: bash update-plugin-index/test-resolve-pr-branch.sh

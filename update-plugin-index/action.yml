@@ -183,7 +183,7 @@ runs:
         PLUGIN_NAME: ${{ inputs.plugin-name }}
         PLUGIN_FILE: ${{ steps.cfg.outputs.plugin-file }}
         BASE_BRANCH: ${{ inputs.base-branch }}
-      run: python3 "$ACTION_PATH/resolve_pr_branch.py"
+      run: bash "$ACTION_PATH/resolve-pr-branch.sh"
 
     - name: Open or update pull request against index repo
       uses: peter-evans/create-pull-request@v8
