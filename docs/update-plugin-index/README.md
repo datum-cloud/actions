@@ -1,6 +1,6 @@
 # Update Plugin Index
 
-The `update-plugin-index` composite action opens a pull request against a
+The `update-plugin-index` composite action opens or updates a pull request against a
 [datumctl](https://github.com/datum-cloud/datumctl) plugin catalog (the "index
 repo") whenever a service repo publishes a release. It bumps a single plugin's
 manifest (`plugins/<plugin-name>.yaml`) to the new version: it sets
@@ -9,6 +9,19 @@ the new tag and refreshes the `sha256` from the release's `checksums.txt`.
 
 This replaces the manual step of hand-editing catalog manifests after each
 release.
+
+## One open update per plugin
+
+Later releases update the same pull request, keeping review discussion together
+and refreshing the version, download URLs, checksums, title, and release notes.
+The action reuses an open update PR in the catalog for the same base branch and
+exact plugin manifest, including PRs created with the older versioned branch
+names. It prefers `update-plugin/<plugin-name>`, then the oldest matching PR.
+When none exists, it opens a PR on `update-plugin/<plugin-name>`.
+
+PRs from forks or containing other changed files are not reused. If the stable
+branch already belongs to an incompatible open PR, the action fails rather than
+overwriting it. Existing duplicate PRs are left for maintainers to close.
 
 ## Why a composite action (not a reusable workflow)
 
@@ -85,6 +98,9 @@ jobs:
     needs: [publish-plugin]
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
+    concurrency:
+      group: plugin-index-milo-os-cli-plugins-ipam-main
+      cancel-in-progress: false
     steps:
       - name: Mint catalog token from a GitHub App
         id: app-token
@@ -95,7 +111,7 @@ jobs:
           owner: milo-os
           repositories: cli-plugins
 
-      - name: Open the catalog PR
+      - name: Open or update the catalog PR
         uses: datum-cloud/actions/update-plugin-index@v1
         with:
           index-repo: milo-os/cli-plugins
@@ -112,6 +128,9 @@ jobs:
   jobs.
 - Depend on the release-asset-publishing job (`needs:`) so `checksums.txt`
   exists before this action reads it.
+- Serialize catalog updates with job-level `concurrency`, using a group per
+  catalog, plugin, and base branch as above. Concurrency groups are scoped to the
+  calling repository and prevent overlapping writes; they do not order releases.
 - Trigger on `release: published` only (or gate with
   `if: github.event_name == 'release'`) so the update runs exactly once per
   release.

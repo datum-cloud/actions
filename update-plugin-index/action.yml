@@ -1,6 +1,6 @@
 name: Update Plugin Index
 description: >-
-  Open a pull request against a datumctl plugin catalog (index repo) that bumps
+  Open or update a pull request against a datumctl plugin catalog (index repo) that bumps
   a single plugin's manifest to a newly published release: it sets spec.version
   and, for every platform entry, rewrites the download URI to point at the new
   tag and refreshes the sha256 from that release's checksums.txt.
@@ -173,13 +173,25 @@ runs:
         echo "=== Resulting manifest ==="
         cat "index-repo/${PLUGIN_FILE}"
 
-    - name: Open pull request against index repo
+    - name: Find an open plugin update pull request
+      id: pr-branch
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        INDEX_REPO: ${{ inputs.index-repo }}
+        PLUGIN_NAME: ${{ inputs.plugin-name }}
+        PLUGIN_FILE: ${{ steps.cfg.outputs.plugin-file }}
+        BASE_BRANCH: ${{ inputs.base-branch }}
+      run: python3 "$ACTION_PATH/resolve_pr_branch.py"
+
+    - name: Open or update pull request against index repo
       uses: peter-evans/create-pull-request@v8
       with:
         token: ${{ inputs.token }}
         path: index-repo
         base: ${{ inputs.base-branch }}
-        branch: update-plugin/${{ inputs.plugin-name }}-${{ inputs.version }}
+        branch: ${{ steps.pr-branch.outputs.branch }}
         commit-message: "Update ${{ inputs.plugin-name }} plugin to ${{ inputs.version }}"
         title: "Update ${{ inputs.plugin-name }} plugin to ${{ inputs.version }}"
         body: |

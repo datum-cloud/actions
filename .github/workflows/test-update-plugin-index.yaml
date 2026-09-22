@@ -1,0 +1,23 @@
+name: Test plugin catalog updates
+
+on:
+  pull_request:
+    paths:
+      - "update-plugin-index/**"
+      - ".github/workflows/test-update-plugin-index.yaml"
+  push:
+    paths:
+      - "update-plugin-index/**"
+      - ".github/workflows/test-update-plugin-index.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test plugin pull request reuse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run regression tests
+        run: python3 -m unittest discover -s update-plugin-index -p 'test_*.py' -v
