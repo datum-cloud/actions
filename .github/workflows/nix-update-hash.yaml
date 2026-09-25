@@ -49,10 +49,20 @@ jobs:
         run: task ${{ inputs.task-command }}
 
       - name: Commit and push changes
+        env:
+          BRANCH: ${{ github.ref_name }}
         run: |
           git diff --exit-code ${{ inputs.flake-path }} && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add ${{ inputs.flake-path }}
           git commit -m "${{ inputs.commit-message }}"
-          git push
+          # Other workflows triggered by the same go.mod push (such as
+          # update-notice) may push to this branch first; rebase onto
+          # their commit and retry.
+          for attempt in 1 2 3; do
+            git push origin "HEAD:$BRANCH" && exit 0
+            echo "Push attempt $attempt rejected, rebasing onto $BRANCH"
+            git pull --rebase origin "$BRANCH"
+          done
+          exit 1
