@@ -113,6 +113,18 @@ Opens a PR against a datumctl plugin catalog (index repo) that bumps a plugin's 
 
 The archive→checksum mapping is driven off the basenames of the manifest's existing `platforms[].uri` values, so it works for any plugin. Regenerating `index.yaml` is left to the index repo's own generator. See [`docs/update-plugin-index/`](docs/update-plugin-index/README.md).
 
+### 7. Update NOTICE (`.github/workflows/update-notice.yaml`)
+
+Regenerates the calling repo's `NOTICE` file of third-party licenses by running a task from its `Taskfile.yml`, then commits and pushes any change to the triggering branch. Callers trigger it on pushes that change `go.mod` or `go.sum` outside `main`, so dependency PRs carry their own NOTICE update. The push step rebases and retries when another workflow from the same trigger (such as `nix-update-hash`, which has the same retry) pushed first.
+
+**Inputs:**
+- `go-version-file` (optional, default `go.mod`): Path to `go.mod` for `actions/setup-go`
+- `task-command` (optional, default `notice`): Task that regenerates NOTICE
+- `notice-path` (optional, default `NOTICE`): File to check and commit
+- `commit-message` (optional, default `chore: update NOTICE for go deps`): Commit message
+
+See [`docs/update-notice/`](docs/update-notice/README.md).
+
 ## Common Development Commands
 
 ### Linting Workflows

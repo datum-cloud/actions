@@ -11,6 +11,11 @@ available for use across the organization.
 - [**Publish Kustomize Bundle**](./publish-kustomize-bundle/) - Build and push Kustomize bundles to GitHub Container Registry
 - [**Update Plugin Index**](./update-plugin-index/) - Open a PR against a datumctl plugin catalog to bump a plugin manifest to a new release, refreshing version, URLs, and checksums
 
+### Dependency Upkeep
+
+- [**Nix Update VendorHash**](./nix-update-hash/) - Recompute `vendorHash` in `flake.nix` when Go dependencies change and commit it to the triggering branch
+- [**Update NOTICE**](./update-notice/) - Regenerate the NOTICE file of third-party licenses when Go dependencies change and commit it to the triggering branch
+
 ### Validation & Linting
 
 - [**Lint GitHub Actions Workflows**](./lint-workflows/) - Validate workflow files using actionlint to catch errors and best practice violations

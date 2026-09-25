@@ -64,6 +64,9 @@ jobs:
 4. Diffs `flake.nix` — if unchanged, exits cleanly with no commit.
 5. Commits the updated `flake.nix` and pushes directly to the triggering
    branch, keeping the hash fix in the same branch as the dependency update.
+   If another workflow triggered by the same push (such as
+   [`update-notice`](../update-notice/)) pushed first, it rebases onto that
+   commit and retries, up to three attempts.
 
 ## Best Practices
 

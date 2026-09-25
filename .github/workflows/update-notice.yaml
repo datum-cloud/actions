@@ -1,4 +1,4 @@
-name: Nix Update VendorHash
+name: Update NOTICE
 
 on:
   workflow_call:
@@ -8,34 +8,29 @@ on:
         type: string
         default: go.mod
       task-command:
-        description: Task command to run (must exist in the calling repo's Taskfile.yml)
+        description: Task command that regenerates NOTICE (must exist in the calling repo's Taskfile.yml)
         type: string
-        default: nix-update-hash
-      flake-path:
-        description: Path to flake.nix to check for changes
+        default: notice
+      notice-path:
+        description: Path to the NOTICE file to check for changes
         type: string
-        default: flake.nix
+        default: NOTICE
       commit-message:
-        description: Commit message for the vendorHash change
+        description: Commit message for the NOTICE change
         type: string
-        default: "chore(nix): update vendorHash for go deps"
+        default: "chore: update NOTICE for go deps"
 
 permissions:
   contents: write
 
 jobs:
-  update-hash:
+  update-notice:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@v31
-        with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Go
         uses: actions/setup-go@v6
@@ -45,20 +40,24 @@ jobs:
       - name: Install Task
         uses: arduino/setup-task@v2
 
-      - name: Update nix vendor hash
-        run: task ${{ inputs.task-command }}
+      - name: Regenerate NOTICE
+        env:
+          TASK_COMMAND: ${{ inputs.task-command }}
+        run: task "$TASK_COMMAND"
 
       - name: Commit and push changes
         env:
+          NOTICE_PATH: ${{ inputs.notice-path }}
+          COMMIT_MESSAGE: ${{ inputs.commit-message }}
           BRANCH: ${{ github.ref_name }}
         run: |
-          git diff --exit-code ${{ inputs.flake-path }} && exit 0
+          git diff --exit-code -- "$NOTICE_PATH" && exit 0
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add ${{ inputs.flake-path }}
-          git commit -m "${{ inputs.commit-message }}"
+          git add -- "$NOTICE_PATH"
+          git commit -m "$COMMIT_MESSAGE"
           # Other workflows triggered by the same go.mod push (such as
-          # update-notice) may push to this branch first; rebase onto
+          # nix-update-hash) may push to this branch first; rebase onto
           # their commit and retry.
           for attempt in 1 2 3; do
             git push origin "HEAD:$BRANCH" && exit 0
