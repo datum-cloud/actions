@@ -34,7 +34,7 @@ The workflow automatically provides the following build arguments to your Docker
 - **VERSION**: Generated from git tags, branch names, or commit SHA using Docker metadata action
 - **GIT_COMMIT**: The full commit SHA (`${{ github.sha }}`)
 - **GIT_TREE_STATE**: Set to `clean` (CI builds are always clean)
-- **BUILD_DATE**: The commit timestamp (`${{ github.event.head_commit.timestamp }}`)
+- **BUILD_DATE**: The build time, ISO8601 in UTC (e.g. `2026-08-26T22:03:21Z`)
 - **SENTRY_AUTH_TOKEN**: Passed from secrets (if available)
 
 These are commonly used for version injection in Go applications using ldflags, e.g.:

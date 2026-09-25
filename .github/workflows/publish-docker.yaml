@@ -117,6 +117,15 @@ jobs:
           echo "tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
           echo "build_version=$BUILD_VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Compute build date
+        id: build-date
+        run: |
+          # ISO8601 in UTC, matching the format Kubernetes serves on /version.
+          # Derived from the build itself rather than github.event.head_commit,
+          # which carries the committer's local UTC offset and is unset on
+          # release events.
+          echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
       - name: Build and Push Docker Image
         id: push
         uses: docker/build-push-action@v7.1.0
@@ -134,7 +143,7 @@ jobs:
             VERSION=${{ steps.version-tag.outputs.build_version }}
             GIT_COMMIT=${{ github.sha }}
             GIT_TREE_STATE=clean
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            BUILD_DATE=${{ steps.build-date.outputs.build_date }}
             SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
             ${{ inputs.extra-build-args }}
           secrets: ${{ secrets.build-secrets }}
