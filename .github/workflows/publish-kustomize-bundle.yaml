@@ -1,3 +1,7 @@
+# Single-image, dedicated-job publisher. For stamping MULTIPLE images (each with
+# its own build-step tag) into one bundle from within the caller's job, see the
+# composite action `publish-kustomize-bundle/action.yml`
+# (`uses: datum-cloud/actions/publish-kustomize-bundle@<ref>`).
 name: Publish Kustomize Bundle
 
 on:

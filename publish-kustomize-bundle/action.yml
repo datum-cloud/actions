@@ -1,0 +1,173 @@
+name: Publish Kustomize Bundle
+description: >-
+  Stamp one or more image references into a Kustomize bundle and push it to an
+  OCI registry (ghcr.io) with Flux. Runs inside the caller's job so it reuses
+  the caller's checkout and prior build-step outputs.
+
+# NOTE: This is a composite action, not a reusable workflow. It runs as a step
+# inside the caller's existing job, so it can consume outputs from earlier
+# build-and-push steps (e.g. per-image tags) and stamp several images into one
+# bundle. The reusable workflow `.github/workflows/publish-kustomize-bundle.yaml`
+# remains available for the single-image, dedicated-job use case.
+#
+# Prerequisites the caller's job MUST satisfy (a composite action cannot):
+#   - `actions/checkout` has already run.
+#   - `docker/login-action` has logged in to the target registry (ghcr.io) so
+#     the `flux push` below authenticates via the caller's Docker credentials.
+#   - Job `permissions:` include `packages: write` and `contents: read`.
+#   - The runner provides `kustomize`, `yq`, and `jq` (GitHub-hosted Ubuntu
+#     runners do). Flux is installed by this action.
+
+inputs:
+  bundle-name:
+    required: true
+    description: >-
+      Full name of the bundle including the registry and repository
+      (e.g. `ghcr.io/datum-cloud/unikraft-provider-kustomize`).
+  bundle-path:
+    required: true
+    description: >-
+      Path to the bundle to push, relative to the repository root
+      (e.g. `config`).
+  images:
+    required: true
+    description: >-
+      Multi-line YAML list of images to stamp before pushing. Each entry is a
+      `{ path, name, tag }` mapping: `path` is a kustomization directory
+      (relative to the repo root) to run `kustomize edit set image` in, `name`
+      is the image to rewrite, and `tag` is optional — when omitted the entry
+      falls back to the bundle's first computed tag. Example:
+        images: |
+          - { path: config/default, name: ghcr.io/datum-cloud/unikraft-provider, tag: "v0.0.0-pr-1-abc" }
+          - { path: config/dependencies/ukp-runtime, name: ghcr.io/datum-cloud/ukp-runtime }
+  debug:
+    required: false
+    default: "false"
+    description: "Print the stamped `images:` blocks and bundle structure before pushing."
+
+outputs:
+  tags:
+    description: "Newline-separated tags computed for the bundle."
+    value: ${{ steps.meta.outputs.tags }}
+  labels:
+    description: "Labels computed for the bundle."
+    value: ${{ steps.meta.outputs.labels }}
+  digest:
+    description: "Digest of the pushed bundle (from the final push)."
+    value: ${{ steps.publish.outputs.digest }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Flux CLI
+      uses: fluxcd/flux2/action@v2.7.5
+
+    - name: Extract bundle metadata
+      id: meta
+      uses: docker/metadata-action@v6
+      with:
+        images: ${{ inputs.bundle-name }}
+        tags: |
+          type=ref,event=pr,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}},prefix=v0.0.0-
+          type=ref,event=pr,prefix=v0.0.0-
+          type=ref,event=branch,suffix=-{{commit_date 'YYYYMMDD-HHmmss'}},prefix=v0.0.0-
+          type=ref,event=branch,prefix=v0.0.0-
+          type=semver,pattern=v{{version}}
+          type=semver,pattern=v{{major}}.{{minor}}
+          type=semver,pattern=v{{major}}
+          type=sha,prefix=v0.0.0-
+
+    - name: Stamp image tags into the bundle
+      shell: bash
+      env:
+        IMAGES: ${{ inputs.images }}
+        BUNDLE_TAGS: ${{ steps.meta.outputs.tags }}
+        BUNDLE_PATH: ${{ inputs.bundle-path }}
+        DEBUG: ${{ inputs.debug }}
+      run: |
+        set -euo pipefail
+
+        # Default tag for entries that don't pin their own: the version portion
+        # of the bundle's first computed tag (mirrors the reusable workflow).
+        DEFAULT_TAG="$(printf '%s\n' "$BUNDLE_TAGS" | head -n1 | cut -d':' -f2)"
+        echo "Default image tag (bundle first tag): ${DEFAULT_TAG}"
+
+        STAMPED_PATHS=()
+        # yq turns the YAML list into one compact-JSON object per line; jq reads
+        # each field. `.tag // ""` yields "" when the entry omits a tag.
+        while IFS= read -r entry; do
+          [ -n "$entry" ] || continue
+
+          path="$(printf '%s' "$entry" | jq -r '.path')"
+          name="$(printf '%s' "$entry" | jq -r '.name')"
+          tag="$(printf '%s' "$entry" | jq -r '.tag // ""')"
+          [ -n "$tag" ] || tag="$DEFAULT_TAG"
+
+          full_path="${GITHUB_WORKSPACE}/${path}"
+          if [ ! -f "${full_path}/kustomization.yaml" ]; then
+            echo "::error::${full_path}/kustomization.yaml not found"
+            exit 1
+          fi
+
+          echo "Setting image ${name}:${tag} in ${path}"
+          ( cd "${full_path}" && kustomize edit set image "${name}=${name}:${tag}" )
+          STAMPED_PATHS+=("${full_path}")
+        done < <(printf '%s\n' "$IMAGES" | yq -o=json -I=0 '.[]')
+
+        if [ "${#STAMPED_PATHS[@]}" -eq 0 ]; then
+          echo "::error::no images were parsed from the 'images' input"
+          exit 1
+        fi
+
+        # Ensure the edits are flushed before the push step reads them.
+        sync
+
+        if [ "${DEBUG}" = "true" ]; then
+          echo "=== Stamped images: blocks ==="
+          for full_path in "${STAMPED_PATHS[@]}"; do
+            echo "--- ${full_path}/kustomization.yaml ---"
+            yq '.images' "${full_path}/kustomization.yaml"
+          done
+          echo "=== Bundle structure at ${BUNDLE_PATH} ==="
+          find "${GITHUB_WORKSPACE}/${BUNDLE_PATH}" -type f | sort
+        fi
+
+    - name: Publish bundle
+      id: publish
+      shell: bash
+      env:
+        BUNDLE_TAGS: ${{ steps.meta.outputs.tags }}
+        BUNDLE_PATH: ${{ inputs.bundle-path }}
+      run: |
+        set -euo pipefail
+
+        FULL_BUNDLE_PATH="${GITHUB_WORKSPACE}/${BUNDLE_PATH}"
+        echo "Publishing bundle from: ${FULL_BUNDLE_PATH}"
+
+        DIGEST=""
+        PUSH_COUNT=0
+        # Push the (already stamped) bundle once per computed tag, mirroring the
+        # reusable workflow. A small delay avoids ghcr rate limiting on bursts.
+        while IFS= read -r tag; do
+          [ -n "$tag" ] || continue
+          PUSH_COUNT=$((PUSH_COUNT + 1))
+          if [ "${PUSH_COUNT}" -gt 1 ]; then
+            sleep 3
+          fi
+
+          tag_version="${tag#*:}"
+          echo "Push #${PUSH_COUNT}: oci://${tag}"
+
+          RESULT="$(flux push artifact \
+            "oci://${tag}" \
+            --path="${FULL_BUNDLE_PATH}" \
+            --source="https://github.com/${GITHUB_REPOSITORY}" \
+            --revision="${tag_version}@sha1:$(git -C "${GITHUB_WORKSPACE}" rev-parse HEAD)" \
+            --output=json)"
+
+          DIGEST="$(printf '%s' "$RESULT" | jq -r '.digest')"
+          echo "  digest: ${DIGEST}"
+        done < <(printf '%s\n' "$BUNDLE_TAGS")
+
+        echo "Total pushes: ${PUSH_COUNT}"
+        echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
