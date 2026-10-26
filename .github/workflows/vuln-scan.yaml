@@ -1,0 +1,140 @@
+name: Vulnerability Scan
+
+# Scans the calling repository for known vulnerabilities and fails on any that
+# are not explicitly ignored: govulncheck for Go modules, osv-scanner for
+# lockfiles (npm, pnpm, yarn, bun, Python, Cargo), and Trivy for container
+# images. Logic lives in scripts/vuln-scan/*.sh, checked out from this repository at
+# the same commit as this workflow.
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Directory to scan, relative to the repository root
+        type: string
+        default: "."
+      ecosystems:
+        description: "`auto` to scan every ecosystem found, or a comma-separated list of go, node, python, rust"
+        type: string
+        default: auto
+      exclude-paths:
+        description: Comma- or newline-separated globs, relative to `path`, of files or directories not to scan
+        type: string
+        default: ""
+      include-dev-dependencies:
+        description: Also scan dev dependencies where the lockfile tells them apart
+        type: boolean
+        default: false
+      images:
+        description: Comma- or newline-separated container image references to scan with Trivy; each must be pullable without credentials
+        type: string
+        default: ""
+      image-severity:
+        description: Comma-separated Trivy severities that fail the scan
+        type: string
+        default: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+      image-ignore-unfixed:
+        description: Skip image vulnerabilities that have no fixed version yet
+        type: boolean
+        default: true
+      go-version:
+        description: Go version for govulncheck, which decides which standard library vulnerabilities apply. Empty picks it from the Go modules' toolchain and go directives
+        type: string
+        default: ""
+      allow-empty:
+        description: Pass, with a warning, when there is nothing to scan
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan for vulnerabilities
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SCAN_PATH: ${{ inputs.path }}
+      ECOSYSTEMS: ${{ inputs.ecosystems }}
+      EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
+      INCLUDE_DEV: ${{ inputs.include-dev-dependencies }}
+      IMAGES: ${{ inputs.images }}
+      IMAGE_SEVERITY: ${{ inputs.image-severity }}
+      IMAGE_IGNORE_UNFIXED: ${{ inputs.image-ignore-unfixed }}
+      ALLOW_EMPTY: ${{ inputs.allow-empty }}
+      GO_VERSION: ${{ inputs.go-version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # job.workflow_* name this reusable workflow's own repository and commit,
+      # so the scripts always match the workflow version the caller pinned.
+      # Empty values would make checkout fall back to a default branch.
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=Vulnerability scan::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+          echo "Scan scripts: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
+
+      - name: Checkout scan scripts
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .vuln-scan-action
+          # Scripts only: the fixtures next to them pin vulnerable versions
+          # on purpose and must not land in the caller's workspace.
+          sparse-checkout: |
+            /scripts/vuln-scan/*.sh
+            /scripts/vuln-scan/*.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # checkout can only write inside the workspace; move the scripts out so
+      # the scan never sees them.
+      - name: Move scan scripts out of the workspace
+        run: |
+          mv "$GITHUB_WORKSPACE/.vuln-scan-action" "$RUNNER_TEMP/vuln-scan-action"
+          echo "SCRIPTS=$RUNNER_TEMP/vuln-scan-action/scripts/vuln-scan" >> "$GITHUB_ENV"
+
+      - name: Find dependencies to scan
+        id: detect
+        run: bash "$SCRIPTS/detect.sh"
+
+      - name: Install Go
+        if: steps.detect.outputs.go == 'true'
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ steps.detect.outputs.go-version }}
+          # A minor version alone, such as 1.25, means its latest patch.
+          check-latest: true
+          cache: false
+
+      - name: Install scanners
+        env:
+          NEED_GO: ${{ steps.detect.outputs.go }}
+          NEED_OSV: ${{ steps.detect.outputs.osv }}
+          NEED_IMAGE: ${{ steps.detect.outputs.image }}
+        run: |
+          tools=()
+          [[ $NEED_GO != true ]] || tools+=(govulncheck)
+          [[ $NEED_OSV != true ]] || tools+=(osv-scanner)
+          [[ $NEED_IMAGE != true ]] || tools+=(trivy)
+          bash "$SCRIPTS/install-tools.sh" "${tools[@]}"
+
+      - name: Scan
+        env:
+          # setup-go sets this too. Kept explicit so a module that needs a
+          # newer Go than the installed one fails instead of downloading it.
+          GOTOOLCHAIN: local
+          REQUIRE_GO_VERSION: "true"
+        run: bash "$SCRIPTS/scan.sh"

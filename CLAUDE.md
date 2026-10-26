@@ -125,6 +125,25 @@ Regenerates the calling repo's `NOTICE` file of third-party licenses by running 
 
 See [`docs/update-notice/`](docs/update-notice/README.md).
 
+### 8. Vulnerability Scan (`.github/workflows/vuln-scan.yaml`)
+
+Scans the calling repo for known vulnerabilities and fails on any that aren't explicitly ignored. Callers run it on every pull request and on a weekly schedule. It auto-detects ecosystems: `govulncheck` for each Go module (reachable vulnerabilities only), `osv-scanner` for npm, pnpm, yarn, bun, Python, and Cargo lockfiles, and Trivy for images named in `images`. Logic lives in `scripts/vuln-scan/*.sh` and `scripts/vuln-scan/findings.py`; the workflow sparse-checks-out only those files (never `testdata/`) at its own commit through `job.workflow_repository` and `job.workflow_sha`, then moves them to `$RUNNER_TEMP` so they're outside the caller's workspace. In a Git work tree it lists files with `git ls-files --cached --others --exclude-standard`, so the caller's `.gitignore` applies; submodules, nested repositories, and manifests without a lockfile are reported as not scanned. Scanner versions are pinned in `scripts/vuln-scan/install-tools.sh` for Renovate.
+
+**Inputs:**
+- `path` (optional, default `.`): Directory to scan
+- `ecosystems` (optional, default `auto`): `auto`, or a list of `go`, `node`, `python`, `rust`; each listed ecosystem must be present
+- `exclude-paths` (optional): Globs, relative to `path`, not to scan
+- `include-dev-dependencies` (optional, default `false`): Also scan dev dependencies; only npm `package-lock.json` and dev-named requirements files can exclude them
+- `images` (optional): Image references to scan with Trivy, pullable without credentials
+- `image-severity` (optional, default all): Trivy severities that fail the scan
+- `image-ignore-unfixed` (optional, default `true`): Skip image vulnerabilities with no fix
+- `go-version` (optional, default empty): Go version for `govulncheck`, which sets the standard library findings. Empty means: within the modules' highest Go minor, a `toolchain` pin if it meets every `go` directive, else that minor's latest patch. The scan runs with `GOTOOLCHAIN=local` and fails if the installed Go doesn't match the request or a module needs a newer Go
+- `allow-empty` (optional, default `false`): Pass with a warning when there is nothing to scan. A manifest without a lockfile isn't "nothing", so it still fails when nothing else was scanned
+
+**Local runs:** `scripts/vuln-scan/run.sh` runs detect, install, and scan on a workstation with the same env-var settings as the inputs (`--help` lists them). It caches scanners per version under `${XDG_CACHE_HOME:-$HOME/.cache}/datum-vuln-scan/bin` and sets `GOTOOLCHAIN` to the selected Go so standard library findings match CI. `scripts/vuln-scan/Taskfile.example.yml` is the caller's Taskfile snippet; it resolves `ACTIONS_REF` (a tag) with `git ls-remote`, sparse-clones the scripts once per commit into the same cache, and runs `run.sh`. The README embeds that file verbatim, and the test fails if the two differ. No Renovate rule updates `ACTIONS_REF`.
+
+Suppressions go in the caller's `osv-scanner.toml` (applied to `govulncheck` too, and every entry needs a `reason`) or `.trivyignore.yaml`. There's no input that turns failures off. `scripts/vuln-scan/test-vuln-scan.sh`, run by `test-vuln-scan.yaml`, asserts that vulnerable fixtures in `scripts/vuln-scan/testdata` fail and clean ones pass; fixture dependency files end in `.fixture` so that the dependency graph and Renovate ignore them. See [`docs/vuln-scan/`](docs/vuln-scan/README.md).
+
 ## Common Development Commands
 
 ### Linting Workflows
@@ -210,7 +229,9 @@ RUN go build -ldflags="-X k8s.io/component-base/version.gitVersion=${VERSION} \
 ## Repository Structure
 
 - `.github/workflows/` - Reusable GitHub Actions workflow definitions
-- `docs/` - Documentation for each action with usage examples and best practices
+- `docs/<action>/` - Documentation for each action with usage examples and best practices
+- `scripts/<action>/` - Scripts, tests, and test fixtures for an action whose logic doesn't fit in its YAML, such as `scripts/vuln-scan/`
+- `update-plugin-index/` - A composite action, kept at the root because callers reference it by path
 - `renovate.json` - Renovate configuration for dependency updates
 ## GitHub PR / Issue / Comment Conventions
 

@@ -1,0 +1,58 @@
+name: Test vulnerability scan
+
+on:
+  pull_request:
+    paths:
+      - "scripts/vuln-scan/**"
+      - ".github/workflows/vuln-scan.yaml"
+      - ".github/workflows/test-vuln-scan.yaml"
+  push:
+    paths:
+      - "scripts/vuln-scan/**"
+      - ".github/workflows/vuln-scan.yaml"
+      - ".github/workflows/test-vuln-scan.yaml"
+  # Advisories and scanner releases change without a commit here; rerun
+  # weekly so a scanner that stops failing on known vulnerabilities is noticed.
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Runs the scripts against vulnerable, clean, ignored, and empty fixtures and
+  # asserts each outcome, including that known vulnerabilities fail the scan.
+  test:
+    name: Test scan outcomes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Lint scripts
+        run: |
+          shellcheck scripts/vuln-scan/*.sh
+          python3 -m py_compile scripts/vuln-scan/findings.py
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+      - name: Install Task
+        uses: arduino/setup-task@v2
+      - name: Install scanners
+        run: bash scripts/vuln-scan/install-tools.sh govulncheck osv-scanner trivy
+      - name: Run fixture tests
+        env:
+          TEST_IMAGES: "true"
+        run: bash scripts/vuln-scan/test-vuln-scan.sh
+
+  # Calls the reusable workflow end to end on a clean Go and npm fixture, so
+  # the wiring (script checkout, tool install, inputs) is exercised too. The
+  # failing cases stay in the test job: a failed job here would fail the run.
+  workflow:
+    name: Run reusable workflow
+    uses: ./.github/workflows/vuln-scan.yaml
+    with:
+      path: scripts/vuln-scan/testdata/workflow
+      ecosystems: go,node

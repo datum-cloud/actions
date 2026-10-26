@@ -2,5 +2,19 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "local>datum-cloud/.github:renovate-config"
+  ],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "scripts/vuln-scan/testdata/**"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Scanner versions pinned in the vulnerability scan's installer",
+      "managerFilePatterns": ["/^scripts/vuln-scan/install-tools\\.sh$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n[A-Z_]+_VERSION=(?<currentValue>\\S+)"
+      ]
+    }
   ]
 }
