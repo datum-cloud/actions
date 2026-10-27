@@ -53,7 +53,7 @@ on:
 
 jobs:
   validate:
-    uses: datum-cloud/actions/.github/workflows/validate-kustomize.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/validate-kustomize.yaml@v1.23.0
 ```
 
 ### With Path Filtering
@@ -72,7 +72,7 @@ on:
 
 jobs:
   validate:
-    uses: datum-cloud/actions/.github/workflows/validate-kustomize.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/validate-kustomize.yaml@v1.23.0
 ```
 
 ### Combined with Other Checks
@@ -87,7 +87,7 @@ on:
 
 jobs:
   validate-kustomize:
-    uses: datum-cloud/actions/.github/workflows/validate-kustomize.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/validate-kustomize.yaml@v1.23.0
 
   lint-yaml:
     runs-on: ubuntu-latest

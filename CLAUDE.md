@@ -77,7 +77,7 @@ on:
 
 jobs:
   publish:
-    uses: datum-cloud/actions/.github/workflows/publish-npm-package.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/publish-npm-package.yaml@v1.23.0
     with:
       package-name: "@datum-cloud/my-package"
       package-path: packages/my-package
@@ -199,12 +199,14 @@ Both Docker and Kustomize workflows use `docker/metadata-action@v5` to generate 
 ## Important Patterns
 
 ### Using These Actions in Other Repositories
-Always reference a tagged version (e.g., `@v1`) to prevent breaking changes:
+Pin an exact release tag, such as `@v1.23.0`, and let Renovate bump it.
+This repository publishes only exact tags, with no major-version tag such as
+`@v1`, so a reference to one fails:
 
 ```yaml
 jobs:
   publish:
-    uses: datum-cloud/actions/.github/workflows/publish-docker.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/publish-docker.yaml@v1.23.0
     with:
       image-name: my-app
     secrets: inherit  # Required for GITHUB_TOKEN and SENTRY_AUTH_TOKEN

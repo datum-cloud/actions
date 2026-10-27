@@ -3,7 +3,7 @@ version: "3"
 vars:
   # A tag. Keep it equal to the ref in your vuln-scan workflow's uses: line;
   # Renovate doesn't update it.
-  ACTIONS_REF: v1
+  ACTIONS_REF: v1.23.0
   ACTIONS_REPO: https://github.com/datum-cloud/actions.git
 
 tasks:
@@ -13,8 +13,8 @@ tasks:
   vuln-scan:
     desc: Scan dependencies for known vulnerabilities, the same way CI does
     vars:
-      # Scripts are cached per commit, so a tag that moves, such as v1, is
-      # fetched again.
+      # Scripts are cached per commit, so a tag that is moved to another
+      # commit is fetched again.
       COMMIT:
         sh: git ls-remote "{{.ACTIONS_REPO}}" "refs/tags/{{.ACTIONS_REF}}" "refs/tags/{{.ACTIONS_REF}}^{}" | tail -n 1 | cut -f 1
       SCRIPTS:

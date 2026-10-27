@@ -29,7 +29,7 @@ All workflows are designed to be used as reusable workflows. Reference them in y
 ```yaml
 jobs:
   job-name:
-    uses: datum-cloud/actions/.github/workflows/<workflow-name>.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/<workflow-name>.yaml@v1.23.0
     with:
       # inputs here
     secrets: inherit
@@ -37,7 +37,9 @@ jobs:
 
 ## Best Practices
 
-- **Use tagged versions**: Always reference workflows with a specific version tag (e.g., `@v1`) to prevent unexpected breaking changes
+- **Pin an exact release tag**: Reference workflows with an exact release tag,
+  such as `@v1.23.0`, and let Renovate bump it. This repository publishes no
+  major-version tag such as `@v1`, so a reference to one fails
 - **Inherit secrets**: Use `secrets: inherit` to pass repository secrets to reusable workflows
 - **Set permissions**: Explicitly define required permissions in your workflow
 - **Review documentation**: Check individual action documentation for specific requirements and examples

@@ -74,7 +74,7 @@ on:
 
 jobs:
   publish:
-    uses: datum-cloud/actions/.github/workflows/publish-docker.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/publish-docker.yaml@v1.23.0
     with:
       image-name: my-app
     secrets: inherit
@@ -92,7 +92,7 @@ on:
 
 jobs:
   publish:
-    uses: datum-cloud/actions/.github/workflows/publish-docker.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/publish-docker.yaml@v1.23.0
     with:
       image-name: my-app
       extra-build-args: |
@@ -119,7 +119,7 @@ on:
 
 jobs:
   publish:
-    uses: datum-cloud/actions/.github/workflows/publish-docker.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/publish-docker.yaml@v1.23.0
     with:
       image-name: my-app
     secrets:

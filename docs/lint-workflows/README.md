@@ -56,7 +56,7 @@ on:
 
 jobs:
   lint:
-    uses: datum-cloud/actions/.github/workflows/lint-workflows.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/lint-workflows.yaml@v1.23.0
 ```
 
 ### With Branch Protection
@@ -71,7 +71,7 @@ on:
 
 jobs:
   lint-workflows:
-    uses: datum-cloud/actions/.github/workflows/lint-workflows.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/lint-workflows.yaml@v1.23.0
 
   test:
     runs-on: ubuntu-latest
@@ -98,7 +98,7 @@ on:
 
 jobs:
   lint:
-    uses: datum-cloud/actions/.github/workflows/lint-workflows.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/lint-workflows.yaml@v1.23.0
 ```
 
 ## Common Issues Detected
