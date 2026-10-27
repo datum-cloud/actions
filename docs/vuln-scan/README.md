@@ -184,9 +184,6 @@ Add these tasks to your repository's `Taskfile.yml`. If you already have a
 version: "3"
 
 vars:
-  # A tag. Keep it equal to the ref in your vuln-scan workflow's uses: line;
-  # Renovate doesn't update it.
-  ACTIONS_REF: v1.23.0
   ACTIONS_REPO: https://github.com/datum-cloud/actions.git
 
 tasks:
@@ -198,13 +195,27 @@ tasks:
     # Needs bash, git, curl, and jq, plus go for Go modules, and python3 3.11
     # or later (for tomllib) when the repository has an osv-scanner.toml.
     vars:
+      # The ref, a tag or a commit SHA, on the uses: line that calls
+      # vuln-scan.yaml in .github/workflows. When Renovate bumps that line,
+      # the local scan moves with it.
+      ACTIONS_REF:
+        sh: |
+          grep -rhoE "datum-cloud/actions/\.github/workflows/vuln-scan\.yaml@[^[:space:]\"'#]+" \
+            "{{.ROOT_DIR}}/.github/workflows" 2> /dev/null | sed 's/.*@//' | sort -u | paste -sd ' ' -
       # Scripts are cached per commit, so a tag that is moved to another
       # commit is fetched again.
       COMMIT:
-        sh: git ls-remote "{{.ACTIONS_REPO}}" "refs/tags/{{.ACTIONS_REF}}" "refs/tags/{{.ACTIONS_REF}}^{}" | tail -n 1 | cut -f 1
+        sh: |
+          case "{{.ACTIONS_REF}}" in
+            "" | *" "*) ;;
+            *[!0-9a-f]*) git ls-remote "{{.ACTIONS_REPO}}" "refs/tags/{{.ACTIONS_REF}}" "refs/tags/{{.ACTIONS_REF}}^{}" | tail -n 1 | cut -f 1 ;;
+            *) echo "{{.ACTIONS_REF}}" ;;
+          esac
       SCRIPTS:
         sh: echo "${XDG_CACHE_HOME:-$HOME/.cache}/datum-vuln-scan/scripts/{{.COMMIT}}"
     cmds:
+      - test -n "{{.ACTIONS_REF}}" || (echo "no workflow in .github/workflows calls datum-cloud/actions/.github/workflows/vuln-scan.yaml" >&2; exit 1)
+      - case "{{.ACTIONS_REF}}" in *" "*) echo "workflows call vuln-scan.yaml at different refs ({{.ACTIONS_REF}}); use one" >&2; exit 1 ;; esac
       - test -n "{{.COMMIT}}" || (echo "{{.ACTIONS_REPO}} has no tag {{.ACTIONS_REF}}" >&2; exit 1)
       - task: vuln-scan:fetch
         vars: { COMMIT: "{{.COMMIT}}", SCRIPTS: "{{.SCRIPTS}}" }
@@ -216,24 +227,26 @@ tasks:
       - test -f "{{.SCRIPTS}}/scripts/vuln-scan/run.sh"
     cmds:
       - rm -rf "{{.SCRIPTS}}.tmp"
-      - git clone --quiet --depth 1 --branch "{{.ACTIONS_REF}}" --no-checkout "{{.ACTIONS_REPO}}" "{{.SCRIPTS}}.tmp"
-      - test "$(git -C "{{.SCRIPTS}}.tmp" rev-parse HEAD)" = "{{.COMMIT}}"
+      - git -c init.defaultBranch=main init --quiet "{{.SCRIPTS}}.tmp"
       - git -C "{{.SCRIPTS}}.tmp" sparse-checkout set --no-cone '/scripts/vuln-scan/*.sh' '/scripts/vuln-scan/*.py'
-      - git -C "{{.SCRIPTS}}.tmp" checkout --quiet
+      - git -C "{{.SCRIPTS}}.tmp" fetch --quiet --depth 1 "{{.ACTIONS_REPO}}" "{{.COMMIT}}"
+      - git -C "{{.SCRIPTS}}.tmp" checkout --quiet FETCH_HEAD
       - mv "{{.SCRIPTS}}.tmp" "{{.SCRIPTS}}"
 ```
 
 Then run `task vuln-scan`, or `task ci`.
 
-The first run fetches only the scan scripts from this repository at
-`ACTIONS_REF` and caches them. Later runs reuse the cache until the tag points
-at a different commit. Each run checks the tag with `git ls-remote`, so it
-needs network access, as the scan does.
+The task reads the ref from the `uses:` line in `.github/workflows` that
+calls `vuln-scan.yaml`, such as `v1.23.0` in `vuln-scan.yaml@v1.23.0`. There's
+no second version to keep in step: when Renovate bumps that line, the local
+scan moves to the same ref. The ref can be a tag, or a commit SHA such as
+Renovate's digest pinning writes. The task fails if no workflow calls
+`vuln-scan.yaml`, or if two workflows call it at different refs.
 
-Keep `ACTIONS_REF` equal to the ref in your workflow's `uses:` line, such as
-`v1.23.0` in `vuln-scan.yaml@v1.23.0`, so that the local scan matches CI. Renovate
-doesn't update `ACTIONS_REF`, so change it by hand when you change the
-workflow's ref.
+The first run fetches only the scan scripts from this repository at that ref
+and caches them. Later runs reuse the cache until the ref points at a
+different commit. Each run checks a tag with `git ls-remote`, so it needs
+network access, as the scan does.
 
 ### From a clone of this repository
 
@@ -439,8 +452,9 @@ each outcome:
 - Manifests without a lockfile are listed, and workspace members aren't.
 - `run.sh` fails on vulnerable fixtures, passes clean ones, reuses cached
   scanners, and scans with the selected Go through `GOTOOLCHAIN`.
-- The Taskfile snippet fetches the scripts once per tag commit and matches
-  `scripts/vuln-scan/Taskfile.example.yml` exactly.
+- The Taskfile snippet takes its ref from the caller's workflow, follows a
+  bump to that ref, accepts a commit SHA, fetches the scripts once per commit,
+  and matches `scripts/vuln-scan/Taskfile.example.yml` exactly.
 - The Go version follows the `toolchain` and `go` directives, a mismatch
   between the installed and requested Go fails the scan, and so does a module
   that needs a newer Go.
