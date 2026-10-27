@@ -1,0 +1,8 @@
+[package]
+name = "vuln-scan-fixture"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cfg-if = "=1.0.0"
+paste = "=1.0.15"

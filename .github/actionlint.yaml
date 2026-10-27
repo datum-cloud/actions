@@ -1,0 +1,7 @@
+paths:
+  .github/workflows/vuln-scan.yaml:
+    ignore:
+      # GitHub documents job.workflow_repository and job.workflow_sha, but
+      # actionlint 1.7.12 doesn't know them yet (rhysd/actionlint#647).
+      # Remove once a release adds them.
+      - 'property "workflow_(repository|sha)" is not defined in object type'

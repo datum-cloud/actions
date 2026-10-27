@@ -20,6 +20,7 @@ available for use across the organization.
 
 - [**Lint GitHub Actions Workflows**](./lint-workflows/) - Validate workflow files using actionlint to catch errors and best practice violations
 - [**Validate Kustomize Configurations**](./validate-kustomize/) - Validate all Kustomize configurations by building them and checking for errors
+- [**Vulnerability Scan**](./vuln-scan/) - Scan Go modules, lockfiles, and container images for known vulnerabilities on every pull request and weekly, and fail on any that aren't explicitly ignored
 
 ## Usage
 
