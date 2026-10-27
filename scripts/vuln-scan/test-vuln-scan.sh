@@ -437,6 +437,17 @@ else
   caller=$test_root/caller
   materialize clean/npm "$caller"
   cp "$script_dir/Taskfile.example.yml" "$caller/Taskfile.yml"
+  mkdir -p "$caller/.github/workflows"
+  # Writes the caller's workflow, calling vuln-scan.yaml at each ref given,
+  # as Renovate leaves it after a bump.
+  call_at() {
+    local ref
+    : > "$caller/.github/workflows/vuln-scan.yaml"
+    for ref in "$@"; do
+      printf '    uses: datum-cloud/actions/.github/workflows/vuln-scan.yaml@%s\n' "$ref" \
+        >> "$caller/.github/workflows/vuln-scan.yaml"
+    done
+  }
   run_task() {
     local name=$1 expected=$2 status
     shift 2
@@ -447,31 +458,49 @@ else
     set -e
     report "$name" "$([[ $status -eq $expected ]] && echo true || echo false)" "exit $status, want $expected"
   }
-  run_task taskfile-fetch 0 vuln-scan ACTIONS_REF=v0.0.1
-  expect_output taskfile-fetch 'git clone --quiet --depth 1 --branch "v0.0.1"' \
+  cached_scripts() {
+    find "$cache/datum-vuln-scan/scripts" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' '
+  }
+  call_at v0.0.1
+  run_task taskfile-fetch 0 vuln-scan
+  expect_output taskfile-fetch "fetch --quiet --depth 1 \"file://$test_root/actions.git\" \"$(git -C "$source_repo" rev-parse v0.0.1)\"" \
     'Passed: no known vulnerabilities in 1 scanned target(s).'
-  run_task taskfile-reuse 0 ci ACTIONS_REF=v0.0.1
+  run_task taskfile-reuse 0 ci
   expect_output taskfile-reuse 'Task "vuln-scan:fetch" is up to date' 'Passed:'
-  reject_output taskfile-reuse 'git clone'
-  run_task taskfile-new-ref 0 vuln-scan ACTIONS_REF=v0.0.2
-  expect_output taskfile-new-ref 'git clone --quiet --depth 1 --branch "v0.0.2"'
-  fetched=$(find "$cache/datum-vuln-scan/scripts" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+  reject_output taskfile-reuse 'git -C'
+  # A Renovate bump to the workflow's ref moves the local scan with it.
+  call_at v0.0.2
+  run_task taskfile-new-ref 0 vuln-scan
+  expect_output taskfile-new-ref "\"$(git -C "$source_repo" rev-parse 'v0.0.2^{}')\""
+  fetched=$(cached_scripts)
   report taskfile-new-ref "$([[ $fetched -eq 2 ]] && echo true || echo false)" \
     "$fetched cached script directories, want 2"
   report taskfile-new-ref "$([[ -z $(find "$cache/datum-vuln-scan/scripts" -path '*testdata*') ]] && echo true || echo false)" \
     "no testdata in the cached scripts"
-  # A tag that moves to another commit, as v1 does, is fetched again.
+  # A ref pinned to a commit SHA, with the tag in a comment, uses that commit.
+  call_at "$(git -C "$source_repo" rev-parse 'v0.0.2^{}') # v0.0.2"
+  run_task taskfile-sha 0 vuln-scan
+  expect_output taskfile-sha 'Task "vuln-scan:fetch" is up to date' 'Passed:'
+  # A tag that moves to another commit is fetched again.
   git -C "$source_repo" -c user.name=test -c user.email=test@example.com \
     commit -q --allow-empty -m third
   git -C "$source_repo" tag -f v0.0.1 > /dev/null
   git -C "$source_repo" push -q -f "$test_root/actions.git" v0.0.1
-  run_task taskfile-moved-tag 0 vuln-scan ACTIONS_REF=v0.0.1
-  expect_output taskfile-moved-tag 'git clone --quiet --depth 1 --branch "v0.0.1"'
-  fetched=$(find "$cache/datum-vuln-scan/scripts" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+  call_at v0.0.1
+  run_task taskfile-moved-tag 0 vuln-scan
+  expect_output taskfile-moved-tag "\"$(git -C "$source_repo" rev-parse v0.0.1)\""
+  fetched=$(cached_scripts)
   report taskfile-moved-tag "$([[ $fetched -eq 3 ]] && echo true || echo false)" \
     "$fetched cached script directories, want 3"
-  run_task taskfile-missing-tag 201 vuln-scan ACTIONS_REF=v9.9.9
+  call_at v9.9.9
+  run_task taskfile-missing-tag 201 vuln-scan
   expect_output taskfile-missing-tag 'has no tag v9.9.9'
+  call_at v0.0.1 v0.0.2
+  run_task taskfile-two-refs 201 vuln-scan
+  expect_output taskfile-two-refs 'workflows call vuln-scan.yaml at different refs (v0.0.1 v0.0.2); use one'
+  rm "$caller/.github/workflows/vuln-scan.yaml"
+  run_task taskfile-no-workflow 201 vuln-scan
+  expect_output taskfile-no-workflow 'no workflow in .github/workflows calls datum-cloud/actions/.github/workflows/vuln-scan.yaml'
 fi
 
 # The README's snippet is this Taskfile, word for word.
