@@ -33,8 +33,8 @@ fail() {
 
 ignore_file=$root/osv-scanner.toml
 if [[ -f $ignore_file ]]; then
-  if ! python3 -I "$script_dir/findings.py" check-ignores "$ignore_file"; then
-    fail ignores "every [[IgnoredVulns]] entry in osv-scanner.toml needs an id and a reason"
+  if ! bash "$script_dir/findings.sh" check-ignores "$ignore_file"; then
+    fail ignores "every [[IgnoredVulns]] entry in osv-scanner.toml needs an id, a reason, and an ignoreUntil at most 12 months away"
   fi
 else
   ignore_file=
@@ -77,7 +77,7 @@ scan_go() {
   if [[ $status -eq 3 && -n $ignore_file ]]; then
     # Text output cannot be filtered, so rerun for the findings as JSON.
     (cd "$root/$dir" && govulncheck -format json ./... > "$out") &&
-      python3 -I "$script_dir/findings.py" govulncheck "$out" "$ignore_file"
+      bash "$script_dir/findings.sh" govulncheck "$out" "$ignore_file"
     case $? in
       0) status=0 ignored=true ;;
       1) ;;
@@ -114,7 +114,7 @@ scan_lockfile() {
   # its JSON decides instead.
   if [[ $status -le 1 ]]; then
     echo "osv-scanner $file:"
-    python3 -I "$script_dir/findings.py" osv "$out" "$counts"
+    bash "$script_dir/findings.sh" osv "$out" "$counts"
     case $? in
       0 | 1) read -r vulns notices < "$counts" ;;
       *) status=2 ;;

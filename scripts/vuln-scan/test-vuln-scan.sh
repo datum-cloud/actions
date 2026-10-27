@@ -3,7 +3,7 @@
 # known-vulnerable dependencies fail the scan and name their advisories, that
 # clean ones pass, and that nothing-to-scan, ignores, and narrowing behave as
 # documented, then run the local entry point, run.sh, and the Taskfile that
-# fetches it. Needs govulncheck, osv-scanner, go, git, task, and python3 on
+# fetches it. Needs govulncheck, osv-scanner, go, git, task, jq, and python3 on
 # PATH, plus network access to the vulnerability databases, go.dev, and the Go
 # module proxy. Set TEST_IMAGES=true to also scan container images with trivy.
 #
@@ -159,24 +159,61 @@ run_case clean-with-dev clean 1 INCLUDE_DEV=true
 expect_output clean-with-dev GHSA-xvch-5gv4-984h PYSEC-2026-1845 'Dev dependencies: included.'
 
 # An ignore entry suppresses only the advisories it names, by ID or alias.
-run_case ignored ignored 0
+# ignore_fixture NAME MONTHS writes the ignored fixture with every
+# ignoreUntil that many months from today, and prints its path.
+ignore_fixture() {
+  local until
+  until=$(jq -rn --argjson months "$2" 'now | gmtime | .[1] += $months | mktime | strftime("%Y-%m-%d")')
+  mkdir -p "$test_root/fixtures/$1"
+  cp -R "$script_dir/testdata/ignored/." "$test_root/fixtures/$1/"
+  sed -i.orig "s/IGNORE_UNTIL/$until/" "$test_root/fixtures/$1/osv-scanner.toml.fixture"
+  rm "$test_root/fixtures/$1/osv-scanner.toml.fixture.orig"
+  echo "$test_root/fixtures/$1"
+}
+
+run_case ignored "$(ignore_fixture ignored 6)" 0
 expect_output ignored 'GO-2021-0113: ignored by osv-scanner.toml entry GO-2021-0113' \
   'GO-2022-1059: ignored by osv-scanner.toml entry CVE-2022-32149' \
   '| go | `go` | govulncheck | no called vulnerabilities (some ignored) |' \
   '| node | `npm/package-lock.json` | osv-scanner | no known vulnerabilities |'
 
-mkdir -p "$test_root/fixtures/expired"
-cp -R "$script_dir/testdata/ignored/." "$test_root/fixtures/expired/"
-sed -i.orig 's/ignoreUntil = 2099-01-01/ignoreUntil = 2020-01-01/' \
-  "$test_root/fixtures/expired/osv-scanner.toml.fixture"
-run_case ignore-expired "$test_root/fixtures/expired" 1
-expect_output ignore-expired 'GO-2021-0113: not ignored' GHSA-35jh-r3h4-6jhm
+# Every ignoreUntil must be set and at most 12 months away; one in the past
+# stops applying.
+run_case ignore-11-months "$(ignore_fixture ignore-11-months 11)" 0
+expect_output ignore-11-months 'GO-2021-0113: ignored by osv-scanner.toml entry GO-2021-0113'
 
-mkdir -p "$test_root/fixtures/no-reason"
-cp -R "$script_dir/testdata/ignored/." "$test_root/fixtures/no-reason/"
+thirteen=$(ignore_fixture ignore-13-months 6)
+late=$(jq -rn 'now | gmtime | .[1] += 13 | mktime | strftime("%Y-%m-%d")')
+limit=$(jq -rn 'now | gmtime | .[0] += 1 | mktime | strftime("%Y-%m-%d")')
+awk -v late="$late" '/id = "GHSA-35jh-r3h4-6jhm"/ { found = 1 }
+  found && /^ignoreUntil/ { $0 = "ignoreUntil = " late; found = 0 } { print }' \
+  "$thirteen/osv-scanner.toml.fixture" > "$thirteen/edited" &&
+  mv "$thirteen/edited" "$thirteen/osv-scanner.toml.fixture"
+run_case ignore-13-months "$thirteen" 1
+expect_output ignore-13-months \
+  "IgnoredVulns entry 4 (GHSA-35jh-r3h4-6jhm) has ignoreUntil $late, more than 12 months away; the latest allowed is $limit"
+
+no_until=$(ignore_fixture ignore-without-until 6)
+awk '/id = "CVE-2022-32149"/ { found = 1 } found && /^ignoreUntil/ { found = 0; next } { print }' \
+  "$no_until/osv-scanner.toml.fixture" > "$no_until/edited" &&
+  mv "$no_until/edited" "$no_until/osv-scanner.toml.fixture"
+run_case ignore-without-until "$no_until" 1
+expect_output ignore-without-until \
+  'IgnoredVulns entry 2 (CVE-2022-32149) has no ignoreUntil; every entry needs one, at most 12 months away'
+
+expired=$(ignore_fixture expired 6)
+sed -i.orig 's/^ignoreUntil = .*/ignoreUntil = 2020-01-01/' "$expired/osv-scanner.toml.fixture"
+run_case ignore-expired "$expired" 1
+# The Go row itself must fail; the npm lockfile alone would fail the scan.
+expect_output ignore-expired 'GO-2021-0113: not ignored' GHSA-35jh-r3h4-6jhm \
+  '| go | `go` | govulncheck | **vulnerabilities found** |' \
+  '| node | `npm/package-lock.json` | osv-scanner | **vulnerabilities found ('
+
+
+no_reason=$(ignore_fixture no-reason 6)
 sed -i.orig '/Fixture: alias of GO-2022-1059/d' \
-  "$test_root/fixtures/no-reason/osv-scanner.toml.fixture"
-run_case ignore-without-reason "$test_root/fixtures/no-reason" 1
+  "$no_reason/osv-scanner.toml.fixture"
+run_case ignore-without-reason "$no_reason" 1
 expect_output ignore-without-reason 'IgnoredVulns entry 2 (CVE-2022-32149) has no reason'
 
 # In a Git work tree, files come from Git. An ignored lockfile and tracked
@@ -296,12 +333,15 @@ cache=$test_root/cache
 # run_local NAME FIXTURE EXPECTED_EXIT [VAR=value ...] runs run.sh in a copy
 # of FIXTURE, as a developer would from the repository root.
 run_local() {
-  local name=$1 fixture=$2 expected=$3 dir status
+  local name=$1 fixture=$2 expected=$3 dir status file
   shift 3
   dir=$test_root/$name
   if [[ $fixture == /* ]]; then
     mkdir -p "$dir"
     cp -R "$fixture/." "$dir/"
+    while IFS= read -r -d '' file; do
+      mv "$file" "${file%.fixture}"
+    done < <(find "$dir" -name '*.fixture' -not -path '*/.git/*' -print0)
   else
     materialize "$fixture" "$dir"
   fi
@@ -316,8 +356,9 @@ run_local() {
   fi
 }
 
+# Inode and modification time; a reinstall replaces the directory.
 mtime() {
-  python3 -I -c 'import os, sys; print(os.stat(sys.argv[1]).st_mtime_ns)' "$1"
+  stat -c '%i %Y' "$1" 2> /dev/null || stat -f '%i %m' "$1"
 }
 
 set +e
@@ -343,6 +384,21 @@ report run-cached "$([[ $(mtime "$osv_dir") == "$before" ]] && echo true || echo
 run_local run-clean clean 0
 expect_output run-clean 'Passed: no known vulnerabilities in 4 scanned target(s).' \
   'Go 1.26 resolved to go1.26.'
+
+# Python reads osv-scanner.toml and nothing else. A python3 that records each
+# call and fails stands in for a machine without it.
+shim=$test_root/no-python
+mkdir -p "$shim"
+printf '#!/usr/bin/env bash\necho "$*" >> "%s/calls"\nexit 1\n' "$shim" > "$shim/python3"
+chmod +x "$shim/python3"
+run_local run-no-python vulnerable/npm 1 PATH="$shim:$PATH"
+expect_output run-no-python GHSA-35jh-r3h4-6jhm
+report run-no-python "$([[ ! -e $shim/calls ]] && echo true || echo false)" \
+  "python3 not called without an osv-scanner.toml"
+run_local run-no-python-toml "$(ignore_fixture no-python-toml 6)" 1 PATH="$shim:$PATH"
+expect_output run-no-python-toml 'python3 3.11 or later is required to read osv-scanner.toml'
+run_case scan-no-python-toml "$(ignore_fixture scan-no-python-toml 6)" 1 PATH="$shim:$PATH"
+expect_output scan-no-python-toml 'reading osv-scanner.toml needs python3 3.11 or later (tomllib)'
 
 # GOTOOLCHAIN makes the scan use the selected Go, not the installed one.
 pin=1.26.10
