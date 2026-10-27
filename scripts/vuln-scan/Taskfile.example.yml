@@ -12,6 +12,8 @@ tasks:
 
   vuln-scan:
     desc: Scan dependencies for known vulnerabilities, the same way CI does
+    # Needs bash, git, curl, and jq, plus go for Go modules, and python3 3.11
+    # or later (for tomllib) when the repository has an osv-scanner.toml.
     vars:
       # Scripts are cached per commit, so a tag that moves, such as v1, is
       # fetched again.

@@ -32,8 +32,9 @@ Scanners are cached by version under
 ${XDG_CACHE_HOME:-$HOME/.cache}/datum-vuln-scan/bin. Delete that directory to
 reinstall them.
 
-Requires bash, git, curl, and python3 3.11 or later, plus go when there are
-Go modules. The go command downloads the Go version the scan selects, so
+Requires bash, git, curl, and jq, plus go when there are Go modules and
+python3 3.11 or later when SCAN_PATH has an osv-scanner.toml, which only
+Python's tomllib can read among preinstalled tools. The go command downloads the Go version the scan selects, so
 standard library findings match CI even when your Go is newer.
 USAGE
 }
@@ -58,11 +59,12 @@ die() {
   exit 1
 }
 
-for command in git curl python3; do
+for command in git curl jq; do
   command -v "$command" > /dev/null || die "$command is required"
 done
-python3 -c 'import tomllib' 2> /dev/null ||
-  die "python3 3.11 or later is required; findings.py reads TOML with tomllib"
+if [[ -f ${SCAN_PATH:-.}/osv-scanner.toml ]] && ! python3 -c 'import tomllib' 2> /dev/null; then
+  die "python3 3.11 or later is required to read osv-scanner.toml; toml-to-json.py says why"
+fi
 
 RUNNER_TEMP=$(mktemp -d "${TMPDIR:-/tmp}/vuln-scan.XXXXXX")
 trap 'rm -rf "$RUNNER_TEMP"' EXIT
@@ -141,14 +143,11 @@ if [[ $(output go) == true ]]; then
   if [[ $exact != *.*.* ]]; then
     exact=$(curl --fail --silent --show-error --location --retry 3 \
       'https://go.dev/dl/?mode=json&include=all' |
-      python3 -I -c '
-import json, sys
-minor = sys.argv[1]
-versions = [r["version"][2:] for r in json.load(sys.stdin) if r["stable"]]
-versions = [v for v in versions if v == minor or v.startswith(minor + ".")]
-key = lambda v: tuple(int(p) for p in v.split("."))
-print(max(versions, key=key) if versions else "")
-' "$requested") || die "can't list Go releases from go.dev to resolve Go $requested"
+      jq -r --arg minor "$requested" '
+        [.[] | select(.stable) | .version | ltrimstr("go")
+         | select(. == $minor or startswith($minor + "."))]
+        | max_by(split(".") | map(tonumber)) // ""
+      ') || die "can't list Go releases from go.dev to resolve Go $requested"
     [[ -n $exact ]] || die "no stable Go release matches $requested"
   fi
 fi

@@ -143,7 +143,8 @@ The job fails when any of these happen:
 - There is nothing to scan and `allow-empty` is `false`.
 - Nothing was scanned and a manifest has no lockfile, whatever `allow-empty`
   is set to.
-- An entry in `osv-scanner.toml` has no `reason`.
+- An entry in `osv-scanner.toml` has no `reason` or no `ignoreUntil`, or an
+  `ignoreUntil` more than 12 months after the day of the scan.
 
 An informational advisory doesn't fail the job. The RustSec database uses
 these for crates that are unmaintained or unsound rather than vulnerable, and
@@ -161,8 +162,10 @@ package, version, fixed versions, and summary.
 
 `scripts/vuln-scan/run.sh` runs the same scan on your workstation, with the
 same scripts, scanner versions, and Go version as CI, so you don't have to
-wait for a pull request. It needs `bash`, `git`, `curl`, and `python3` 3.11
-or later, plus `go` when the repository has Go modules. It reads the same
+wait for a pull request. It needs `bash`, `git`, `curl`, and `jq`, plus `go`
+when the repository has Go modules, and `python3` 3.11 or later when the
+repository has an `osv-scanner.toml`. [How it works](#how-it-works) says why
+Python. It reads the same
 settings as the workflow inputs from environment variables, such as
 `ECOSYSTEMS`, `EXCLUDE_PATHS`, `ALLOW_EMPTY`, and `GO_VERSION`. Run
 `run.sh --help` for the full list.
@@ -192,6 +195,8 @@ tasks:
 
   vuln-scan:
     desc: Scan dependencies for known vulnerabilities, the same way CI does
+    # Needs bash, git, curl, and jq, plus go for Go modules, and python3 3.11
+    # or later (for tomllib) when the repository has an osv-scanner.toml.
     vars:
       # Scripts are cached per commit, so a tag that moves, such as v1, is
       # fetched again.
@@ -285,11 +290,19 @@ ignoreUntil = 2026-12-31
 reason = "Only parses headers set by our own proxy. Upgrade: example-org/app#123."
 ```
 
-- `id` is the advisory ID that the scan reported. A `govulncheck` entry also
-  matches on any of the advisory's aliases, such as its CVE or GHSA ID.
+- `id` is the advisory ID that the scan reported.
 - `reason` is required. The scan fails on an entry without one.
-- `ignoreUntil` is optional. After that date, the entry stops applying and
-  the scan fails again, so that someone reviews it. Set one.
+- `ignoreUntil` is required, and can be at most 12 months after the day of
+  the scan. The scan fails on an entry without one, or with a later date, and
+  the error names the latest date allowed. After `ignoreUntil`, the entry stops
+  applying and the scan fails again, so that someone reviews it.
+
+`osv-scanner` applies these entries itself. For `govulncheck` findings, the
+workflow reimplements the matching: an entry matches a finding by its Go
+advisory ID or by any of its aliases, such as its CVE or GHSA ID, and stops
+applying at its `ignoreUntil`. These are two separate implementations of the
+same file, so they can disagree on an entry. To avoid that, ignore an
+advisory by the ID that the scan reported for it.
 
 The workflow reads only the `osv-scanner.toml` at the root of `path`. It
 ignores files of that name in subdirectories.
@@ -373,8 +386,16 @@ downloading another version.
    `scripts/vuln-scan/install-tools.sh`, and Renovate updates them.
 4. Runs `scripts/vuln-scan/scan.sh`, which runs each scanner, writes the job
    summary, and fails the job if any target failed.
-   `scripts/vuln-scan/findings.py` reads the scanners' JSON output to apply
-   ignore entries and skip informational advisories.
+   `scripts/vuln-scan/findings.sh` reads the scanners' JSON output with `jq`
+   to apply ignore entries and skip informational advisories.
+
+The scripts are Bash, with `awk`, `sed`, `grep`, and `jq`, which GitHub-hosted
+runners have preinstalled. The one exception is
+`scripts/vuln-scan/toml-to-json.py`, which converts `osv-scanner.toml` to JSON
+for `jq`. None of those tools can parse TOML, a hand-written parser could read
+a suppression differently from `osv-scanner`, and Python's `tomllib` is the
+only TOML parser preinstalled on the runners. So the scan needs Python 3.11
+or later, but only when the repository has an `osv-scanner.toml`.
 
 ## Limitations
 
@@ -409,8 +430,9 @@ each outcome:
 - Clean fixtures pass, including a Go module that requires a vulnerable module
   version but never calls the vulnerable code.
 - Informational RustSec advisories don't fail the scan.
-- Ignore entries suppress only what they name, expire on their date, and need
-  a reason.
+- Ignore entries suppress only what they name and expire on their date. An
+  entry without a reason or an `ignoreUntil` fails the scan, and so does one
+  13 months away, while one 11 months away passes.
 - Nothing to scan fails unless `allow-empty` is `true`.
 - In a Git work tree, ignored files aren't scanned and untracked ones are.
   Outside one, the scan falls back to walking the directory.
@@ -423,7 +445,7 @@ each outcome:
   between the installed and requested Go fails the scan, and so does a module
   that needs a newer Go.
 
-To run the test locally, put `go`, `git`, `task`, `govulncheck`,
+To run the test locally, put `go`, `git`, `task`, `jq`, `govulncheck`,
 `osv-scanner`, and `python3` on your `PATH`, then run:
 
 ```sh

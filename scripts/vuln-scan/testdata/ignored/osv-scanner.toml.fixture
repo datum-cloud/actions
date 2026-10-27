@@ -1,37 +1,38 @@
-# Every entry needs a reason; ignoreUntil makes it expire for review.
-# GO-2022-1059 is matched by its alias, the way osv-scanner matches it.
+# Every entry needs a reason and an ignoreUntil at most 12 months away. The
+# test replaces IGNORE_UNTIL with a date relative to the day it runs.
+# GO-2022-1059 is ignored through its CVE alias.
 
 [[IgnoredVulns]]
 id = "GO-2021-0113"
-ignoreUntil = 2099-01-01
+ignoreUntil = IGNORE_UNTIL
 reason = "Fixture: proves govulncheck findings honor osv-scanner.toml."
 
 [[IgnoredVulns]]
 id = "CVE-2022-32149"
-ignoreUntil = 2099-01-01
+ignoreUntil = IGNORE_UNTIL
 reason = "Fixture: alias of GO-2022-1059."
 
 [[IgnoredVulns]]
 id = "GHSA-29mw-wpgm-hmr9"
-ignoreUntil = 2099-01-01
+ignoreUntil = IGNORE_UNTIL
 reason = "Fixture: proves osv-scanner honors osv-scanner.toml."
 
 [[IgnoredVulns]]
 id = "GHSA-35jh-r3h4-6jhm"
-ignoreUntil = 2099-01-01
+ignoreUntil = IGNORE_UNTIL
 reason = "Fixture: proves osv-scanner honors osv-scanner.toml."
 
 [[IgnoredVulns]]
 id = "GHSA-f23m-r3pf-42rh"
-ignoreUntil = 2099-01-01
+ignoreUntil = IGNORE_UNTIL
 reason = "Fixture: proves osv-scanner honors osv-scanner.toml."
 
 [[IgnoredVulns]]
 id = "GHSA-r5fr-rjxr-66jc"
-ignoreUntil = 2099-01-01
+ignoreUntil = IGNORE_UNTIL
 reason = "Fixture: proves osv-scanner honors osv-scanner.toml."
 
 [[IgnoredVulns]]
 id = "GHSA-xxjr-mmjv-4gpg"
-ignoreUntil = 2099-01-01
+ignoreUntil = IGNORE_UNTIL
 reason = "Fixture: proves osv-scanner honors osv-scanner.toml."
