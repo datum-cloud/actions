@@ -5,6 +5,9 @@ name: Vulnerability Scan
 # lockfiles (npm, pnpm, yarn, bun, Python, Cargo), and Trivy for container
 # images. Logic lives in scripts/vuln-scan/*.sh, checked out from this repository at
 # the same commit as this workflow.
+#
+# Usage, inputs, ignore files, and local runs:
+# https://github.com/datum-cloud/actions/blob/main/docs/vuln-scan/README.md
 
 on:
   workflow_call:
@@ -38,7 +41,12 @@ on:
         type: boolean
         default: true
       go-version:
-        description: Go version for govulncheck, which decides which standard library vulnerabilities apply. Empty picks it from the Go modules' toolchain and go directives
+        description: >-
+          Go version for govulncheck, which decides which standard library vulnerabilities apply.
+          Empty uses the highest Go minor among the modules' go and toolchain directives, then
+          the toolchain version if a module pins one in that minor and it meets every go directive,
+          else that minor's latest patch: a module with `go 1.26.0` and no toolchain line scans
+          with the latest 1.26 patch, not 1.26.0
         type: string
         default: ""
       allow-empty:

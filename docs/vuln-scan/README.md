@@ -87,6 +87,23 @@ jobs:
 To make the scan block merges, add the `vuln-scan / Scan for vulnerabilities`
 check to the branch's required status checks.
 
+### Check that it covers your repository
+
+This repository already tests that the scan fails on a known-vulnerable
+dependency in each ecosystem and on a vulnerable container image. See
+[Test the workflow](#test-the-workflow). You don't need to add a vulnerable
+dependency to your repository to prove it again.
+
+Check what this repository can't test for you:
+
+- **Your targets are scanned.** In the job summary of the first run, every
+  dependency file and image you expect is listed as scanned, and none is
+  listed as not scanned. A file that's missing from the summary, or listed
+  as not scanned, isn't covered.
+- **The check is required.** `vuln-scan / Scan for vulnerabilities` is a
+  required status check on the default branch, so a failing scan blocks
+  merges.
+
 ### Narrow the scan
 
 Scan only the Go modules and skip example code:
