@@ -58,7 +58,7 @@ concurrency:
 
 jobs:
   publish-datum-ui:
-    uses: datum-cloud/actions/.github/workflows/publish-npm-package.yaml@main
+    uses: datum-cloud/actions/.github/workflows/publish-npm-package.yaml@v1.23.0
     with:
       package-name: "@datum-cloud/datum-ui"
       package-path: packages/datum-ui

@@ -51,7 +51,7 @@ permissions:
 
 jobs:
   update-hash:
-    uses: datum-cloud/actions/.github/workflows/nix-update-hash.yaml@main
+    uses: datum-cloud/actions/.github/workflows/nix-update-hash.yaml@v1.23.0
     secrets: inherit
 ```
 

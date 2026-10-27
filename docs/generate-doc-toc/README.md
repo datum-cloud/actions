@@ -34,7 +34,7 @@ on:
 
 jobs:
   generate-toc:
-    uses: datum-cloud/actions/.github/workflows/generate-doc-toc.yaml@main
+    uses: datum-cloud/actions/.github/workflows/generate-doc-toc.yaml@v1.23.0
     permissions:
       contents: write
 ```
@@ -44,7 +44,7 @@ jobs:
 ```yaml
 jobs:
   generate-toc:
-    uses: datum-cloud/actions/.github/workflows/generate-doc-toc.yaml@main
+    uses: datum-cloud/actions/.github/workflows/generate-doc-toc.yaml@v1.23.0
     with:
       docs-path: content/docs/
     permissions:

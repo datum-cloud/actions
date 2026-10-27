@@ -81,7 +81,7 @@ permissions:
 
 jobs:
   vuln-scan:
-    uses: datum-cloud/actions/.github/workflows/vuln-scan.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/vuln-scan.yaml@v1.23.0
 ```
 
 To make the scan block merges, add the `vuln-scan / Scan for vulnerabilities`
@@ -94,7 +94,7 @@ Scan only the Go modules and skip example code:
 ```yaml
 jobs:
   vuln-scan:
-    uses: datum-cloud/actions/.github/workflows/vuln-scan.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/vuln-scan.yaml@v1.23.0
     with:
       ecosystems: go
       exclude-paths: examples/*
@@ -105,7 +105,7 @@ jobs:
 ```yaml
 jobs:
   vuln-scan:
-    uses: datum-cloud/actions/.github/workflows/vuln-scan.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/vuln-scan.yaml@v1.23.0
     with:
       images: ghcr.io/example-org/example-app:latest
 ```
@@ -120,7 +120,7 @@ record that the repository has nothing to scan:
 ```yaml
 jobs:
   vuln-scan:
-    uses: datum-cloud/actions/.github/workflows/vuln-scan.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/vuln-scan.yaml@v1.23.0
     with:
       allow-empty: true
 ```
@@ -183,7 +183,7 @@ version: "3"
 vars:
   # A tag. Keep it equal to the ref in your vuln-scan workflow's uses: line;
   # Renovate doesn't update it.
-  ACTIONS_REF: v1
+  ACTIONS_REF: v1.23.0
   ACTIONS_REPO: https://github.com/datum-cloud/actions.git
 
 tasks:
@@ -193,8 +193,8 @@ tasks:
   vuln-scan:
     desc: Scan dependencies for known vulnerabilities, the same way CI does
     vars:
-      # Scripts are cached per commit, so a tag that moves, such as v1, is
-      # fetched again.
+      # Scripts are cached per commit, so a tag that is moved to another
+      # commit is fetched again.
       COMMIT:
         sh: git ls-remote "{{.ACTIONS_REPO}}" "refs/tags/{{.ACTIONS_REF}}" "refs/tags/{{.ACTIONS_REF}}^{}" | tail -n 1 | cut -f 1
       SCRIPTS:
@@ -226,7 +226,7 @@ at a different commit. Each run checks the tag with `git ls-remote`, so it
 needs network access, as the scan does.
 
 Keep `ACTIONS_REF` equal to the ref in your workflow's `uses:` line, such as
-`v1` in `vuln-scan.yaml@v1`, so that the local scan matches CI. Renovate
+`v1.23.0` in `vuln-scan.yaml@v1.23.0`, so that the local scan matches CI. Renovate
 doesn't update `ACTIONS_REF`, so change it by hand when you change the
 workflow's ref.
 

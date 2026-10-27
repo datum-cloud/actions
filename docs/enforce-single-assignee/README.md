@@ -40,7 +40,7 @@ on:
 
 jobs:
   enforce:
-    uses: datum-cloud/actions/.github/workflows/enforce-single-assignee.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/enforce-single-assignee.yaml@v1.23.0
     secrets: inherit
 ```
 

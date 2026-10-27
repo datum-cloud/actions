@@ -112,7 +112,7 @@ jobs:
           repositories: cli-plugins
 
       - name: Open or update the catalog PR
-        uses: datum-cloud/actions/update-plugin-index@v1
+        uses: datum-cloud/actions/update-plugin-index@v1.23.0
         with:
           index-repo: milo-os/cli-plugins
           plugin-name: ipam
@@ -122,8 +122,9 @@ jobs:
 
 ## Best Practices
 
-- Always reference a tagged version (e.g. `@v1`) to prevent unexpected breaking
-  changes.
+- Pin an exact release tag, such as `@v1.23.0`, and let Renovate bump it. This
+  repository publishes no major-version tag such as `@v1`, so a reference to one
+  fails.
 - Mint the token in the **same job** and pass it via `token:` — never across
   jobs.
 - Depend on the release-asset-publishing job (`needs:`) so `checksums.txt`

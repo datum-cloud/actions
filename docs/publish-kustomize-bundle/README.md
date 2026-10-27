@@ -43,7 +43,7 @@ on:
 
 jobs:
   publish:
-    uses: datum-cloud/actions/.github/workflows/publish-kustomize-bundle.yaml@v1
+    uses: datum-cloud/actions/.github/workflows/publish-kustomize-bundle.yaml@v1.23.0
     with:
       bundle-name: ghcr.io/datum-cloud/telemetry-services-operator/crds
       bundle-path: config/crds
