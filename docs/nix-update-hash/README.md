@@ -59,14 +59,17 @@ jobs:
 
 1. Checks out the repository at the triggering commit.
 2. Installs Nix, Go, and Task.
-3. Runs `task <task-command>` — the calling repo's script recomputes
+3. Runs `task <task-command>`; the calling repo's script recomputes
    `vendorHash` and writes it back to `flake.nix`.
-4. Diffs `flake.nix` — if unchanged, exits cleanly with no commit.
+4. Diffs `flake.nix`. If unchanged, exits cleanly with no commit.
 5. Commits the updated `flake.nix` to the triggering branch through the
-   GitHub API, so GitHub signs the commit and the hash fix stays in the same
-   branch as the dependency update. If another workflow triggered by the same
-   push (such as [`update-notice`](../update-notice/)) committed first, it
-   commits again on top of the new head, up to five attempts.
+   GitHub API, so GitHub signs the commit. The commit only lands if the
+   branch is still at the commit the job checked out.
+6. If another workflow triggered by the same push (such as
+   [`update-notice`](../update-notice/)) moved the branch first, fetches the
+   branch, resets the checkout to it, runs the task again from scratch, and
+   commits on the new head. This repeats up to five attempts in total. Any
+   other failure ends the run without a retry.
 
 ## Best Practices
 

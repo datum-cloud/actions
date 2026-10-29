@@ -45,9 +45,6 @@ jobs:
       - name: Install Task
         uses: arduino/setup-task@v2
 
-      - name: Update nix vendor hash
-        run: task ${{ inputs.task-command }}
-
       - name: Check workflow identity
         env:
           WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
@@ -65,18 +62,15 @@ jobs:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: .sign-commit-action
-          sparse-checkout: /scripts/sign-commit/sign-commit
+          sparse-checkout: /scripts/sign-commit/
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
-      - name: Commit changes
+      - name: Update nix vendor hash and commit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.ref_name }}
+          TASK_COMMAND: ${{ inputs.task-command }}
           FLAKE_PATH: ${{ inputs.flake-path }}
           COMMIT_MESSAGE: ${{ inputs.commit-message }}
-        run: |
-          git diff --exit-code -- "$FLAKE_PATH" && exit 0
-          EXPECTED_HEAD=$(git rev-parse HEAD)
-          export EXPECTED_HEAD
-          .sign-commit-action/scripts/sign-commit/sign-commit "$BRANCH" "$COMMIT_MESSAGE" "$FLAKE_PATH"
+        run: .sign-commit-action/scripts/sign-commit/commit-generated "$BRANCH" "$COMMIT_MESSAGE" "$FLAKE_PATH" task "$TASK_COMMAND"

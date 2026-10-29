@@ -66,9 +66,13 @@ jobs:
 3. Runs `task <task-command>`, which regenerates `NOTICE`.
 4. Diffs `NOTICE`. If unchanged, exits cleanly with no commit.
 5. Commits the updated `NOTICE` to the triggering branch through the GitHub
-   API, so GitHub signs the commit. If another workflow triggered by the same
-   push (such as [`nix-update-hash`](../nix-update-hash/)) committed first, it
-   commits again on top of the new head, up to five attempts.
+   API, so GitHub signs the commit. The commit only lands if the branch is
+   still at the commit the job checked out.
+6. If another workflow triggered by the same push (such as
+   [`nix-update-hash`](../nix-update-hash/)) moved the branch first, fetches
+   the branch, resets the checkout to it, runs the task again from scratch,
+   and commits on the new head. This repeats up to five attempts in total.
+   Any other failure ends the run without a retry.
 
 ## Best Practices
 
