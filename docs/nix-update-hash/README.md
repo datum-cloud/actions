@@ -62,11 +62,11 @@ jobs:
 3. Runs `task <task-command>` — the calling repo's script recomputes
    `vendorHash` and writes it back to `flake.nix`.
 4. Diffs `flake.nix` — if unchanged, exits cleanly with no commit.
-5. Commits the updated `flake.nix` and pushes directly to the triggering
-   branch, keeping the hash fix in the same branch as the dependency update.
-   If another workflow triggered by the same push (such as
-   [`update-notice`](../update-notice/)) pushed first, it rebases onto that
-   commit and retries, up to three attempts.
+5. Commits the updated `flake.nix` to the triggering branch through the
+   GitHub API, so GitHub signs the commit and the hash fix stays in the same
+   branch as the dependency update. If another workflow triggered by the same
+   push (such as [`update-notice`](../update-notice/)) committed first, it
+   commits again on top of the new head, up to five attempts.
 
 ## Best Practices
 

@@ -65,10 +65,10 @@ jobs:
 2. Installs Go and Task.
 3. Runs `task <task-command>`, which regenerates `NOTICE`.
 4. Diffs `NOTICE`. If unchanged, exits cleanly with no commit.
-5. Commits the updated `NOTICE` and pushes directly to the triggering branch.
-   If another workflow triggered by the same push (such as
-   [`nix-update-hash`](../nix-update-hash/)) pushed first, it rebases onto
-   that commit and retries, up to three attempts.
+5. Commits the updated `NOTICE` to the triggering branch through the GitHub
+   API, so GitHub signs the commit. If another workflow triggered by the same
+   push (such as [`nix-update-hash`](../nix-update-hash/)) committed first, it
+   commits again on top of the new head, up to five attempts.
 
 ## Best Practices
 

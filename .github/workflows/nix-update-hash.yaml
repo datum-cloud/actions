@@ -48,21 +48,22 @@ jobs:
       - name: Update nix vendor hash
         run: task ${{ inputs.task-command }}
 
-      - name: Commit and push changes
+      - name: Checkout commit script
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .sign-commit-action
+          sparse-checkout: /scripts/sign-commit/sign-commit
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Commit changes
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.ref_name }}
+          FLAKE_PATH: ${{ inputs.flake-path }}
+          COMMIT_MESSAGE: ${{ inputs.commit-message }}
         run: |
-          git diff --exit-code ${{ inputs.flake-path }} && exit 0
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add ${{ inputs.flake-path }}
-          git commit -m "${{ inputs.commit-message }}"
-          # Other workflows triggered by the same go.mod push (such as
-          # update-notice) may push to this branch first; rebase onto
-          # their commit and retry.
-          for attempt in 1 2 3; do
-            git push origin "HEAD:$BRANCH" && exit 0
-            echo "Push attempt $attempt rejected, rebasing onto $BRANCH"
-            git pull --rebase origin "$BRANCH"
-          done
-          exit 1
+          git diff --exit-code -- "$FLAKE_PATH" && exit 0
+          .sign-commit-action/scripts/sign-commit/sign-commit "$BRANCH" "$COMMIT_MESSAGE" "$FLAKE_PATH"
