@@ -1,0 +1,1 @@
+const o = { eval: (x) => x }; o.eval(1);

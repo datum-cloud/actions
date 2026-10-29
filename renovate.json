@@ -6,16 +6,42 @@
   ],
   "ignorePaths": [
     "**/node_modules/**",
-    "scripts/vuln-scan/testdata/**"
+    "scripts/vuln-scan/testdata/**",
+    "scripts/code-scan/testdata/**"
   ],
   "customManagers": [
     {
       "customType": "regex",
       "description": "Scanner versions pinned in the vulnerability scan's installer",
-      "managerFilePatterns": ["/^scripts/vuln-scan/install-tools\\.sh$/"],
+      "managerFilePatterns": [
+        "/^scripts/vuln-scan/install-tools\\.sh$/"
+      ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n[A-Z_]+_VERSION=(?<currentValue>\\S+)"
       ]
+    }
+  ],
+  "pip-compile": {
+    "managerFilePatterns": [
+      "/^scripts/code-scan/requirements\\.txt$/"
+    ]
+  },
+  "constraints": {
+    "python": "3.11"
+  },
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "description": "requirements.txt is a pip-compile lock; let the pip-compile manager own it",
+      "matchManagers": [
+        "pip_requirements"
+      ],
+      "matchFileNames": [
+        "scripts/code-scan/requirements.txt"
+      ],
+      "enabled": false
     }
   ]
 }

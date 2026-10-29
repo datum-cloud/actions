@@ -1,0 +1,30 @@
+rules:
+  - id: process-execution
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      The code loads child_process or calls Bun.spawn or Bun.$ to start another
+      process. Injected code uses this to run shell commands.
+    pattern-either:
+      - pattern: import $X from "child_process"
+      - pattern: import {...} from "child_process"
+      - pattern: import * as $X from "child_process"
+      - pattern: import $X, {...} from "child_process"
+      - pattern: import $X from "node:child_process"
+      - pattern: import {...} from "node:child_process"
+      - pattern: import * as $X from "node:child_process"
+      - pattern: import $X, {...} from "node:child_process"
+      - pattern: require("child_process")
+      - pattern: require("node:child_process")
+      - pattern: import("child_process")
+      - pattern: import("node:child_process")
+      - pattern: Bun.spawn
+      - pattern: Bun.spawnSync
+      - pattern: Bun.$
+      - pattern: Bun["spawn"]
+      - pattern: Bun["spawnSync"]
+      - pattern: Bun["$"]
+      - pattern: const {..., spawn, ...} = Bun
+      - pattern: const {..., spawnSync, ...} = Bun
+      - pattern: const {..., $, ...} = Bun
+      - pattern: '"=~/^(node:)?child_process$/"'

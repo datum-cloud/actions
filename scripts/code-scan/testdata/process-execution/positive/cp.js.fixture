@@ -1,0 +1,8 @@
+import { exec, execSync } from 'node:child_process';
+import cp from 'child_process';
+const { spawn } = require('child_process');
+exec('true');
+execSync('true');
+cp.execFile('true');
+cp.fork('x.js');
+spawn('true');

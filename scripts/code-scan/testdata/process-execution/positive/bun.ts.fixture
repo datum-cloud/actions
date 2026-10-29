@@ -1,0 +1,3 @@
+Bun.spawn(['true']);
+Bun.spawnSync(['true']);
+const out = await Bun.$`true`;

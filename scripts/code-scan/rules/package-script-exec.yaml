@@ -1,0 +1,20 @@
+rules:
+  # npm, pnpm, yarn, and bun run lifecycle scripts (preinstall, postinstall,
+  # prepare) on install, so a script value is code as much as a .js file is.
+  - id: package-script-exec
+    languages: [json]
+    severity: ERROR
+    message: >-
+      A package.json script runs inline code, starts a process through
+      child_process, or decodes base64. Install hooks run such scripts on
+      every install.
+    patterns:
+      - pattern: '{..., "scripts": {..., "$K": "$V", ...}, ...}'
+      - focus-metavariable: $V
+      # metavariable-regex anchors at the start of the value.
+      - metavariable-regex:
+          metavariable: $V
+          regex: '(?s).*(child_process|\beval\b|\bFunction\(|\bnode(js)?\s+(-e|--eval|-p|--print|-pe)\b|\bbun\s+(-e|--eval|-p|--print)\b|\bdeno\s+eval\b|base64)'
+    paths:
+      include:
+        - package.json

@@ -1,0 +1,1 @@
+createRequire(import.meta.url)('../notes.md');

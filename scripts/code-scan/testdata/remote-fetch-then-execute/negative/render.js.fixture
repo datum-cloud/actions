@@ -1,0 +1,4 @@
+const res = await fetch('https://example.invalid/a');
+const body = await res.text();
+document.title = body;
+console.log(body);

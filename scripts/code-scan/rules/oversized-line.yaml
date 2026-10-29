@@ -1,0 +1,26 @@
+rules:
+  - id: oversized-line-build-file
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      A line in a build, CI, or tooling file is longer than 500 characters.
+      Long lines hide injected code from review; ordinary build files stay
+      well under this limit.
+    pattern-regex: '^.{501,}$'
+    paths:
+      include:
+        - '*.config.js'
+        - '*.config.mjs'
+        - '*.config.cjs'
+        - '*.config.ts'
+        - 'package.json'
+        - '/scripts/**'
+        - '/.github/**'
+        - '/.husky/**'
+        - 'lefthook.yml'
+        - 'lefthook.yaml'
+        - '/cypress/support/**'
+        - '/cypress/plugins/**'
+        - '*.sh'
+        - '.eslintrc*'
+        - '.prettierrc*'

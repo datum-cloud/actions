@@ -1,0 +1,28 @@
+rules:
+  # B is a visible character and W a blank one: ASCII and Unicode spaces,
+  # form feed, vertical tab, and the zero-width and blank-looking characters
+  # (U+200B-U+200D, U+2060, U+FEFF, U+2800, U+3164, U+FFA0, U+115F, U+1160).
+  # \p{Zs} would be shorter, but Semgrep's \s is ASCII-only, so a B built on
+  # \S would count NBSP as code and flag NBSP indentation. Each alternative is
+  # unambiguous (B and W are disjoint, and the counted character is left out of
+  # the run before it), so matching stays linear on long blank lines.
+  - id: hidden-code-after-whitespace
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Code follows a long run of blank characters on the same line, which
+      pushes it off-screen in diffs and editors. Leading indentation does not
+      match.
+    # Markdown tables pad cells with long runs of spaces, and Markdown doesn't
+    # run. MDX can hold code, so it stays in scope. Globs are case-sensitive.
+    paths:
+      exclude:
+        - '*.md'
+        - '*.markdown'
+    pattern-either:
+      # 100 or more blank characters of any kind.
+      - pattern-regex: '[^\s\x{A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{2028}\x{2029}\x{202F}\x{205F}\x{2060}\x{3000}\x{FEFF}\x{2800}\x{3164}\x{FFA0}\x{115F}\x{1160}][\t\x{0B}\x{0C} \x{A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{202F}\x{205F}\x{2060}\x{3000}\x{FEFF}\x{2800}\x{3164}\x{FFA0}\x{115F}\x{1160}]{100,}[^\s\x{A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{2028}\x{2029}\x{202F}\x{205F}\x{2060}\x{3000}\x{FEFF}\x{2800}\x{3164}\x{FFA0}\x{115F}\x{1160}]'
+      # 13 or more tabs, which an editor shows 8 columns wide.
+      - pattern-regex: '[^\s\x{A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{2028}\x{2029}\x{202F}\x{205F}\x{2060}\x{3000}\x{FEFF}\x{2800}\x{3164}\x{FFA0}\x{115F}\x{1160}](?:[\x{0B}\x{0C} \x{A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{202F}\x{205F}\x{2060}\x{3000}\x{FEFF}\x{2800}\x{3164}\x{FFA0}\x{115F}\x{1160}]*\t){13,}[\x{0B}\x{0C} \x{A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{202F}\x{205F}\x{2060}\x{3000}\x{FEFF}\x{2800}\x{3164}\x{FFA0}\x{115F}\x{1160}]*[^\s\x{A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{2028}\x{2029}\x{202F}\x{205F}\x{2060}\x{3000}\x{FEFF}\x{2800}\x{3164}\x{FFA0}\x{115F}\x{1160}]'
+      # 50 or more ideographic spaces, which are two columns wide.
+      - pattern-regex: '[^\s\x{A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{2028}\x{2029}\x{202F}\x{205F}\x{2060}\x{3000}\x{FEFF}\x{2800}\x{3164}\x{FFA0}\x{115F}\x{1160}](?:[\t\x{0B}\x{0C} \x{A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{202F}\x{205F}\x{2060}\x{FEFF}\x{2800}\x{3164}\x{FFA0}\x{115F}\x{1160}]*\x{3000}){50,}[\t\x{0B}\x{0C} \x{A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{202F}\x{205F}\x{2060}\x{FEFF}\x{2800}\x{3164}\x{FFA0}\x{115F}\x{1160}]*[^\s\x{A0}\x{1680}\x{180E}\x{2000}-\x{200D}\x{2028}\x{2029}\x{202F}\x{205F}\x{2060}\x{3000}\x{FEFF}\x{2800}\x{3164}\x{FFA0}\x{115F}\x{1160}]'

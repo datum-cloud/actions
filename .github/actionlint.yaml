@@ -5,3 +5,7 @@ paths:
       # actionlint 1.7.12 doesn't know them yet (rhysd/actionlint#647).
       # Remove once a release adds them.
       - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/code-scan.yaml:
+    ignore:
+      # Same unknown job.workflow_* properties as vuln-scan.yaml above.
+      - 'property "workflow_(repository|sha)" is not defined in object type'

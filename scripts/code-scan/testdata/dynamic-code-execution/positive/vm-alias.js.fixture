@@ -1,0 +1,1 @@
+import v from 'node:vm'; v.runInNewContext('1');

@@ -1,0 +1,1 @@
+Reflect.construct(Function, ['void 0'])();

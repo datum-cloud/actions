@@ -1,0 +1,4 @@
+// child_process.exec('true') is only mentioned in this comment.
+const note = "import { exec } from 'child_process'";
+const runner = { exec: (x) => x };
+runner.exec(1);

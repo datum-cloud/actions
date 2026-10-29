@@ -1,0 +1,7 @@
+// Inert fixture, never run: a Function call that spans lines, with text that
+// tries to forge workflow commands once it is shown in the annotation.
+Function(
+  '::add-mask::x 100% \r\n::error::forged',
+  '::stop-commands::tok
+::error::forged'
+);

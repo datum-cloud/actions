@@ -1,0 +1,3 @@
+const make = new Function('a', 'return a');
+const make2 = Function('a', 'return a');
+const hop = value.constructor.constructor('return 1');

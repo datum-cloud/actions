@@ -1,0 +1,46 @@
+rules:
+  # Shell, build, CI, and hook files, and JavaScript or TypeScript, which can
+  # hand the command to child_process. Documentation is out of scope: install
+  # instructions often show curl | sh.
+  - id: download-pipe-to-shell
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      A download is piped straight into a shell, so whatever the remote server
+      returns runs unreviewed.
+    pattern-regex: '(\b(curl|wget)\b[^|\n]*(\|[^|\n]*)*\|\s*(sudo\s+(-\S+\s+)*)?(ba|z)?sh\b|\b(ba|z)?sh\b[^\n]*(\$\(|<\()\s*(curl|wget)\b|\b(iwr|Invoke-WebRequest)\b[^|\n]*\|\s*iex\b)'
+    paths:
+      include:
+        - '*.sh'
+        - '*.bash'
+        - '*.zsh'
+        - '*.js'
+        - '*.mjs'
+        - '*.cjs'
+        - '*.jsx'
+        - '*.ts'
+        - '*.mts'
+        - '*.cts'
+        - '*.tsx'
+        - 'package.json'
+        - '/.github/**'
+        - '/.husky/**'
+        - 'lefthook.yml'
+        - 'lefthook.yaml'
+        - 'Dockerfile*'
+        - 'Makefile'
+        - 'Taskfile*'
+  # The same check for any file whose first line is a shell shebang, such as
+  # an extensionless bin/setup, which no path pattern can name. \K starts the
+  # match at the download, so the finding points at its line. It needs its
+  # own id: Semgrep merges rules that share one, and the merged rule loses
+  # one side's path filter. Keep it unscoped: as a rule that applies to every
+  # file, it puts every selected target in Semgrep's paths.scanned list,
+  # which prescan.py reads.
+  - id: download-pipe-to-shell-shebang
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      A download is piped straight into a shell, so whatever the remote server
+      returns runs unreviewed.
+    pattern-regex: '(?s)\A#![^\n]*\b(ba|z|da|k)?sh\b.*?\K(\b(curl|wget)\b[^|\n]*(\|[^|\n]*)*\|\s*(sudo\s+(-\S+\s+)*)?(ba|z)?sh\b|\b(ba|z)?sh\b[^\n]*(\$\(|<\()\s*(curl|wget)\b|\b(iwr|Invoke-WebRequest)\b[^|\n]*\|\s*iex\b)'

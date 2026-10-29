@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "prepare": "bun -e \"void 0\"",
+    "decode": "echo dm9pZCAw | base64 -d > out.js",
+    "start": "node --eval \"eval('void 0')\""
+  }
+}
