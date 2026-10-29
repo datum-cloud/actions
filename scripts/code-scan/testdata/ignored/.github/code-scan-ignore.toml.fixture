@@ -1,0 +1,5 @@
+[[Ignore]]
+rule = "process-execution"
+path = "scripts/graphql.ts"
+reason = "Runs the GraphQL codegen CLI via child_process during `bun run graphql`; not curl | sh"
+ignoreUntil = 2027-04-30

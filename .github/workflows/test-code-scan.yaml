@@ -1,0 +1,51 @@
+name: Test code scan
+
+on:
+  pull_request:
+    paths:
+      - "scripts/code-scan/**"
+      - ".github/workflows/code-scan.yaml"
+      - ".github/workflows/test-code-scan.yaml"
+  push:
+    paths:
+      - "scripts/code-scan/**"
+      - ".github/workflows/code-scan.yaml"
+      - ".github/workflows/test-code-scan.yaml"
+  # Semgrep and its dependencies are locked by hash and change only through a
+  # Renovate pull request, which runs these tests. The weekly run catches
+  # engine or rule regressions that no commit here triggers.
+  schedule:
+    - cron: "43 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Runs the scripts against payload, clean, and ignored fixtures and asserts
+  # each outcome, including that every injection technique fails the scan.
+  test:
+    name: Test scan outcomes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Lint scripts
+        run: |
+          shellcheck scripts/code-scan/*.sh
+          python3 -m py_compile scripts/code-scan/*.py
+      - name: Install Semgrep
+        run: bash scripts/code-scan/install-semgrep.sh
+      - name: Run fixture tests
+        run: bash scripts/code-scan/test-code-scan.sh
+
+  # Calls the reusable workflow end to end on a clean fixture, so the wiring
+  # (script checkout, Semgrep install, inputs) is exercised too. The payload
+  # cases stay in the test job: a failed job here would fail the run. Only the
+  # clean fixture is scanned because testdata/ holds payloads on purpose.
+  workflow:
+    name: Run reusable workflow
+    uses: ./.github/workflows/code-scan.yaml
+    with:
+      path: scripts/code-scan/testdata/clean

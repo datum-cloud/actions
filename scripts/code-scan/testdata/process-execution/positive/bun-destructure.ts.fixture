@@ -1,0 +1,2 @@
+const { spawn } = Bun;
+spawn(['true']);

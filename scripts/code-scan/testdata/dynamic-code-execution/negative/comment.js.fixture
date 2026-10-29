@@ -1,0 +1,4 @@
+// eval(code) and new Function('x') are only mentioned in this comment.
+const note = "call eval(code) or new Function('x') here";
+const evaluate = (x) => x + 1;
+evaluate(1);

@@ -1,0 +1,8 @@
+{
+  "name": "fixture",
+  "private": true,
+  "scripts": {
+    "postinstall": "node -e \"require('child_process').execSync('true')\"",
+    "build": "vite build"
+  }
+}

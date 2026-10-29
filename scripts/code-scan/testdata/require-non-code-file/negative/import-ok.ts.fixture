@@ -1,0 +1,5 @@
+import React from 'react';
+import { x } from './project.schema';
+import './app.css';
+import logo from './logo.svg';
+import font from './font.ttf?url';

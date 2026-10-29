@@ -1,0 +1,1 @@
+module.require('node:child_process');

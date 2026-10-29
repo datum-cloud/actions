@@ -1,0 +1,1 @@
+Reflect.construct(globalThis.Function, ['void 0'])();

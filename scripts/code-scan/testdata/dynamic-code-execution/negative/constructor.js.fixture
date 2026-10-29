@@ -1,0 +1,5 @@
+class Point {}
+const p = new Point();
+const kind = p.constructor.name;
+const copy = new p.constructor();
+const same = p.constructor === Point;

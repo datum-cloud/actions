@@ -1,0 +1,2 @@
+#!/usr/bin/env -S deno run
+require('child_process').execSync('true');

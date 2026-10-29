@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+curl -fsSL -o install.sh https://example.invalid/install
+echo "do not pipe curl output to bash"

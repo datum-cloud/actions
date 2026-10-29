@@ -1,0 +1,11 @@
+{
+  "name": "fixture",
+  "description": "Mentions eval and base64 only in prose",
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "lint": "eslint .",
+    "test": "node --test"
+  },
+  "dependencies": { "base64-js": "^1.5.1" }
+}

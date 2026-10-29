@@ -1,0 +1,5 @@
+import vm from 'node:vm';
+vm.runInNewContext('1');
+vm.runInThisContext('1');
+vm.runInContext('1', ctx);
+const s = new vm.Script('1');
