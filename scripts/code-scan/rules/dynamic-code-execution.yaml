@@ -1,0 +1,38 @@
+rules:
+  - id: dynamic-code-execution
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Code is built and run from a string at runtime. Injected code often
+      hides behind eval, Function, or the vm module, including through
+      aliases and indirect calls.
+    pattern-either:
+      - pattern: eval
+      - pattern: new Function(...)
+      - pattern: Function(...)
+      - patterns:
+          - pattern-either:
+              - pattern: $G.eval
+              - pattern: $G.Function
+              - pattern: $G["eval"]
+              - pattern: $G["Function"]
+          - metavariable-regex:
+              metavariable: $G
+              regex: ^(globalThis|window|global|self)$
+      - pattern: $V.runInNewContext(...)
+      - pattern: $V.runInThisContext(...)
+      - pattern: $V.runInContext(...)
+      - pattern: $V.compileFunction(...)
+      - pattern: new $V.Script(...)
+      - pattern: $X.constructor.constructor(...)
+      # A function's constructor is Function: (function(){}).constructor,
+      # (() => {}).constructor, [].map.constructor.
+      - pattern: (function (...) {...}).constructor(...)
+      - pattern: ((...) => $B).constructor(...)
+      - pattern: $X.$M.constructor(...)
+      - pattern: Reflect.construct(Function, ...)
+      - patterns:
+          - pattern: Reflect.construct($G.Function, ...)
+          - metavariable-regex:
+              metavariable: $G
+              regex: ^(globalThis|window|global|self)$

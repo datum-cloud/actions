@@ -1,0 +1,99 @@
+rules:
+  - id: remote-fetch-then-execute
+    languages: [javascript, typescript]
+    severity: ERROR
+    mode: taint
+    message: >-
+      Data fetched over the network reaches code that runs it: eval, Function,
+      vm, child_process, Bun.spawn, require, or a dynamic import. Taint follows
+      the value through await, .text(), .json(), and .data.
+    pattern-sources:
+      - pattern: fetch(...)
+      - pattern: axios(...)
+      - pattern: axios.$M(...)
+      - patterns:
+          - pattern-inside: $H.$M(..., ($RES) => {...})
+          - metavariable-regex:
+              metavariable: $H
+              regex: ^(http|https)$
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(get|request)$
+          - focus-metavariable: $RES
+      - patterns:
+          - pattern-inside: $H.$M(..., ($RES) => {...})
+          - metavariable-regex:
+              metavariable: $H
+              regex: ^(http|https)$
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(get|request)$
+          - pattern: $RES.on("data", ($C) => {...})
+          - focus-metavariable: $C
+      - patterns:
+          - pattern-inside: $H.$M(..., ($RES) => {...})
+          - metavariable-regex:
+              metavariable: $H
+              regex: ^(http|https)$
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(get|request)$
+          - pattern: $RES.on("data", function ($C) {...})
+          - focus-metavariable: $C
+      - patterns:
+          - pattern-inside: $H.$M(..., function ($RES) {...})
+          - metavariable-regex:
+              metavariable: $H
+              regex: ^(http|https)$
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(get|request)$
+          - focus-metavariable: $RES
+      - patterns:
+          - pattern-inside: $H.$M(..., function ($RES) {...})
+          - metavariable-regex:
+              metavariable: $H
+              regex: ^(http|https)$
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(get|request)$
+          - pattern: $RES.on("data", ($C) => {...})
+          - focus-metavariable: $C
+      - patterns:
+          - pattern-inside: $H.$M(..., function ($RES) {...})
+          - metavariable-regex:
+              metavariable: $H
+              regex: ^(http|https)$
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(get|request)$
+          - pattern: $RES.on("data", function ($C) {...})
+          - focus-metavariable: $C
+    pattern-sinks:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: Function(...)
+      - pattern: vm.runInNewContext(...)
+      - pattern: vm.runInThisContext(...)
+      - pattern: vm.runInContext(...)
+      - pattern: new vm.Script(...)
+      - pattern: $X.constructor.constructor(...)
+      - pattern: require(...)
+      - pattern: import(...)
+      - pattern: exec(...)
+      - pattern: execSync(...)
+      - pattern: execFile(...)
+      - pattern: execFileSync(...)
+      - pattern: spawn(...)
+      - pattern: spawnSync(...)
+      - pattern: fork(...)
+      - pattern: $CP.exec(...)
+      - pattern: $CP.execSync(...)
+      - pattern: $CP.execFile(...)
+      - pattern: $CP.execFileSync(...)
+      - pattern: $CP.spawn(...)
+      - pattern: $CP.spawnSync(...)
+      - pattern: $CP.fork(...)
+      - pattern: Bun.spawn(...)
+      - pattern: Bun.spawnSync(...)
+      - pattern: Bun.$`...`

@@ -1,0 +1,50 @@
+rules:
+  # CommonJS runs any file it loads by path as JavaScript unless the extension
+  # is one it knows, so require('./notes.txt') or require('./logo.gif') runs
+  # that file. Semgrep only applies the JavaScript rules to JavaScript
+  # extensions, so the loaded file itself is never checked as code.
+  #
+  # require and createRequire: any relative or absolute path whose last
+  # segment has an extension other than a code or JSON one.
+  # import and export-from: TypeScript leaves extensions off ('./x.schema'
+  # means x.schema.ts), so only extensions that are never modules match:
+  # text, data, other languages' scripts, archives, and raster images.
+  # Bundler assets (.css, .svg, fonts) and query specifiers ('./x.ttf?url')
+  # don't match.
+  - id: require-non-code-file
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Code loads a file that doesn't have a JavaScript extension. CommonJS
+      runs such a file as JavaScript, but the scan doesn't check it as code.
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: require("$P")
+              - pattern: $M.require("$P")
+              - pattern: createRequire(...)("$P")
+              - pattern: $M.createRequire(...)("$P")
+              - pattern: |
+                  $R = createRequire(...);
+                  ...
+                  $R("$P");
+              - pattern: |
+                  $R = $M.createRequire(...);
+                  ...
+                  $R("$P");
+          - metavariable-regex:
+              metavariable: $P
+              regex: '^(?:\.{1,2}/|/|file:)(?:.*/)?[^/]*\.(?!(?:js|mjs|cjs|ts|mts|cts|jsx|tsx|json|node)$)[^./?#]+$'
+      - patterns:
+          - pattern-either:
+              - pattern: import("$P")
+              - pattern: import "$P"
+              - pattern: import $X from "$P"
+              - pattern: import {...} from "$P"
+              - pattern: import * as $X from "$P"
+              - pattern: import $X, {...} from "$P"
+              - pattern: export {...} from "$P"
+              - pattern: export * from "$P"
+          - metavariable-regex:
+              metavariable: $P
+              regex: '^(?:\.{1,2}/|/|file:)(?:.*/)?[^/]*\.(?i:txt|text|md|markdown|rst|log|csv|tsv|dat|data|bin|out|tmp|bak|yaml|yml|toml|ini|cfg|conf|env|lock|xml|html?|map|pem|key|crt|sh|bash|zsh|py|rb|pl|php|bat|cmd|ps1|zip|gz|tgz|tar|gif|png|jpe?g|webp|avif|bmp|ico|tiff?|pdf)$'
