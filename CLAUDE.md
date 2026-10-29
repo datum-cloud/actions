@@ -144,6 +144,18 @@ Scans the calling repo for known vulnerabilities and fails on any that aren't ex
 
 Suppressions go in the caller's `osv-scanner.toml` or `.trivyignore.yaml`. Every `osv-scanner.toml` entry needs an `id`, a `reason`, and an `ignoreUntil` at most 12 months after the scan date. `findings.sh` reimplements osv-scanner's matching (ID or alias, until `ignoreUntil`) to apply those entries to `govulncheck`, so the two can disagree. There's no input that turns failures off. `scripts/vuln-scan/test-vuln-scan.sh`, run by `test-vuln-scan.yaml`, asserts that vulnerable fixtures in `scripts/vuln-scan/testdata` fail and clean ones pass; fixture dependency files end in `.fixture` so that the dependency graph and Renovate ignore them. See [`docs/vuln-scan/`](docs/vuln-scan/README.md).
 
+### 9. Code Scan (`.github/workflows/code-scan.yaml`)
+
+Scans the calling repo's source for signs of injected code with Semgrep and fails on any finding that the central ignore file doesn't cover. Callers run it on every pull request. Semgrep only reads files: nothing from the caller is installed or run. Rules in `scripts/code-scan/rules/*.yaml` catch process execution, dynamic code execution, remote fetch then execute (taint), download piped into a shell, code after 100+ whitespace characters, and lines over 500 characters in build files. The scan reads the whole tree and deletes `.semgrepignore` files, turns off Semgrep's default skip list, `.gitignore`, the file size limit, timeouts, and inline `nosemgrep`. Logic lives in `scripts/code-scan/` (`install-semgrep.sh`, `scan.sh`, and Python for filtering and reporting); the workflow sparse-checks-out only the `.sh`, `.py`, and `rules/*.yaml` files (never `testdata/`) at its own commit through `job.workflow_repository` and `job.workflow_sha`, then moves them to `$RUNNER_TEMP`. Raw Semgrep output is never echoed to the log because it holds attacker-controlled text; findings appear as escaped annotations and in the job summary. The Semgrep version is pinned in `scripts/code-scan/install-semgrep.sh` for Renovate.
+
+**Inputs:**
+- `path` (optional, default `.`): Directory to scan
+- `exclude-paths` (optional, default empty): Globs, relative to `path`, not to scan
+- `extra-rules` (optional, default empty): Extra Semgrep rules file or directory, relative to `path`
+- `ignore-file` (optional, default `.github/code-scan-ignore.toml`): Central ignore file, relative to `path`
+
+Suppressions go only in the ignore file, as `[[Ignore]]` entries with `rule`, one exact `path` (no globs), `reason`, and an `ignoreUntil` at most 12 months out. Callers protect the file with CODEOWNERS. Exit codes: 0 clean, 1 findings, 2 scanner or configuration error. The job has a 30-minute limit because Semgrep runs with `--timeout 0`. `scripts/code-scan/test-code-scan.sh`, run by `test-code-scan.yaml`, asserts that payload fixtures in `scripts/code-scan/testdata` fail and the clean one passes; any workflow here that scans the repo root must exclude `scripts/code-scan/testdata`. See [`docs/code-scan/`](docs/code-scan/README.md).
+
 ## Common Development Commands
 
 ### Linting Workflows
@@ -232,7 +244,7 @@ RUN go build -ldflags="-X k8s.io/component-base/version.gitVersion=${VERSION} \
 
 - `.github/workflows/` - Reusable GitHub Actions workflow definitions
 - `docs/<action>/` - Documentation for each action with usage examples and best practices
-- `scripts/<action>/` - Scripts, tests, and test fixtures for an action whose logic doesn't fit in its YAML, such as `scripts/vuln-scan/`
+- `scripts/<action>/` - Scripts, tests, and test fixtures for an action whose logic doesn't fit in its YAML, such as `scripts/vuln-scan/` and `scripts/code-scan/`
 - `update-plugin-index/` - A composite action, kept at the root because callers reference it by path
 - `renovate.json` - Renovate configuration for dependency updates
 ## GitHub PR / Issue / Comment Conventions

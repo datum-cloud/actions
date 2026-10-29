@@ -1,0 +1,113 @@
+name: Code Scan
+
+# Scans the calling repository's source for signs of injected code, such as
+# process execution, dynamic code execution, downloads piped into a shell, and
+# code hidden past a run of whitespace, and fails on any finding that the
+# central ignore file does not cover. Semgrep reads the files and runs none of
+# them. Logic lives in scripts/code-scan/, checked out from this repository at
+# the same commit as this workflow.
+#
+# Usage, inputs, the ignore file, and local runs:
+# https://github.com/datum-cloud/actions/blob/main/docs/code-scan/README.md
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Directory to scan, relative to the repository root
+        type: string
+        default: "."
+      exclude-paths:
+        description: Comma- or newline-separated globs, relative to `path`, of files or directories not to scan
+        type: string
+        default: ""
+      extra-rules:
+        description: Path, relative to `path`, of an extra Semgrep rules file or directory to scan with
+        type: string
+        default: ""
+      ignore-file:
+        description: Central ignore file, relative to `path`
+        type: string
+        default: .github/code-scan-ignore.toml
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan for injected code
+    runs-on: ubuntu-latest
+    # Semgrep runs without a time limit so that a payload can't hide in a file
+    # that times out, so the job needs its own bound.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      SCAN_PATH: ${{ inputs.path }}
+      EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
+      EXTRA_RULES: ${{ inputs.extra-rules }}
+      IGNORE_FILE: ${{ inputs.ignore-file }}
+    steps:
+      # fetch-depth 2 brings the merge commit's parents, so the pull request's
+      # base is in the checkout for the ignore file.
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # job.workflow_* name this reusable workflow's own repository and commit,
+      # so the scripts always match the workflow version the caller pinned.
+      # Empty values would make checkout fall back to a default branch.
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=Code scan::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+          echo "Scan scripts: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
+
+      - name: Checkout scan scripts
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .code-scan-action
+          # Scripts and rules only: the fixtures next to them hold payloads on
+          # purpose and must not land in the caller's workspace.
+          sparse-checkout: |
+            /scripts/code-scan/*.sh
+            /scripts/code-scan/*.py
+            /scripts/code-scan/requirements.txt
+            /scripts/code-scan/rules/*.yaml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # checkout can only write inside the workspace; move the scripts out so
+      # the scan never sees them.
+      - name: Move scan scripts out of the workspace
+        run: |
+          mv "$GITHUB_WORKSPACE/.code-scan-action" "$RUNNER_TEMP/code-scan-action"
+          echo "SCRIPTS=$RUNNER_TEMP/code-scan-action/scripts/code-scan" >> "$GITHUB_ENV"
+
+      # On a pull request the ignore file comes from the base commit, so the
+      # pull request can't suppress its own findings. The base is the merge
+      # checkout's first parent; event.pull_request.base.sha can lag the merge
+      # commit and fall outside the shallow fetch. pr-base.sh checks that the
+      # second parent is the pull request's head first.
+      - name: Find the pull request's base
+        if: github.event_name == 'pull_request'
+        env:
+          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          base=$(bash "$SCRIPTS/pr-base.sh")
+          echo "IGNORE_BASE_REF=$base" >> "$GITHUB_ENV"
+
+      - name: Install Semgrep
+        run: bash "$SCRIPTS/install-semgrep.sh"
+
+      - name: Scan
+        run: bash "$SCRIPTS/scan.sh"
