@@ -192,6 +192,7 @@ runs:
         path: index-repo
         base: ${{ inputs.base-branch }}
         branch: ${{ steps.pr-branch.outputs.branch }}
+        sign-commits: true
         commit-message: "Update ${{ inputs.plugin-name }} plugin to ${{ inputs.version }}"
         title: "Update ${{ inputs.plugin-name }} plugin to ${{ inputs.version }}"
         body: |

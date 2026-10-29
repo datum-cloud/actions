@@ -9,3 +9,12 @@ paths:
     ignore:
       # Same unknown job.workflow_* properties as vuln-scan.yaml above.
       - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/nix-update-hash.yaml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/update-notice.yaml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/bump-npm-version.yaml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'

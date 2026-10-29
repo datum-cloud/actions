@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Regenerate a file and commit it through sign-commit, again from a fresh
+# checkout of the branch when another job moved it first.
+# Usage: commit-generated BRANCH MESSAGE PATH COMMAND [ARG...]
+# Runs COMMAND, commits PATH if it changed, and tries at most five times. Only a
+# moved branch (sign-commit exit 3) is retried: the script fetches BRANCH, resets
+# the checkout to it, and runs COMMAND again so the change is built on the new
+# head. Any other failure ends the run.
+# Needs the sign-commit environment (GH_TOKEN, GITHUB_REPOSITORY).
+set -euo pipefail
+
+branch=$1
+message=$2
+path=$3
+shift 3
+
+sign_commit="$(dirname "$0")/sign-commit"
+
+for attempt in 1 2 3 4 5; do
+  "$@"
+  if git diff --quiet -- "$path"; then
+    echo "${path} is already up to date; nothing to commit."
+    exit 0
+  fi
+  EXPECTED_HEAD=$(git rev-parse HEAD)
+  export EXPECTED_HEAD
+  status=0
+  "$sign_commit" "$branch" "$message" "$path" || status=$?
+  if [ "$status" -eq 0 ]; then
+    exit 0
+  fi
+  if [ "$status" -ne 3 ]; then
+    exit "$status"
+  fi
+  echo "${branch} moved; fetching it and regenerating (attempt ${attempt} of 5)." >&2
+  git fetch origin "$branch"
+  git reset --hard FETCH_HEAD
+done
+echo "${branch} kept moving; gave up after 5 attempts." >&2
+exit 1

@@ -40,28 +40,32 @@ jobs:
       - name: Install Task
         uses: arduino/setup-task@v2
 
-      - name: Regenerate NOTICE
+      - name: Check workflow identity
         env:
-          TASK_COMMAND: ${{ inputs.task-command }}
-        run: task "$TASK_COMMAND"
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=Update NOTICE::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+          echo "Commit script: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
 
-      - name: Commit and push changes
+      - name: Checkout commit script
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .sign-commit-action
+          sparse-checkout: /scripts/sign-commit/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Regenerate NOTICE and commit
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+          TASK_COMMAND: ${{ inputs.task-command }}
           NOTICE_PATH: ${{ inputs.notice-path }}
           COMMIT_MESSAGE: ${{ inputs.commit-message }}
-          BRANCH: ${{ github.ref_name }}
-        run: |
-          git diff --exit-code -- "$NOTICE_PATH" && exit 0
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -- "$NOTICE_PATH"
-          git commit -m "$COMMIT_MESSAGE"
-          # Other workflows triggered by the same go.mod push (such as
-          # nix-update-hash) may push to this branch first; rebase onto
-          # their commit and retry.
-          for attempt in 1 2 3; do
-            git push origin "HEAD:$BRANCH" && exit 0
-            echo "Push attempt $attempt rejected, rebasing onto $BRANCH"
-            git pull --rebase origin "$BRANCH"
-          done
-          exit 1
+        run: .sign-commit-action/scripts/sign-commit/commit-generated "$BRANCH" "$COMMIT_MESSAGE" "$NOTICE_PATH" task "$TASK_COMMAND"
