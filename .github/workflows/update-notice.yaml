@@ -45,6 +45,17 @@ jobs:
           TASK_COMMAND: ${{ inputs.task-command }}
         run: task "$TASK_COMMAND"
 
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=Update NOTICE::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+          echo "Commit script: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
+
       - name: Checkout commit script
         uses: actions/checkout@v6
         with:
@@ -63,4 +74,6 @@ jobs:
           BRANCH: ${{ github.ref_name }}
         run: |
           git diff --exit-code -- "$NOTICE_PATH" && exit 0
+          EXPECTED_HEAD=$(git rev-parse HEAD)
+          export EXPECTED_HEAD
           .sign-commit-action/scripts/sign-commit/sign-commit "$BRANCH" "$COMMIT_MESSAGE" "$NOTICE_PATH"

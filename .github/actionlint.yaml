@@ -15,3 +15,6 @@ paths:
   .github/workflows/update-notice.yaml:
     ignore:
       - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/bump-npm-version.yaml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'

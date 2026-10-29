@@ -39,12 +39,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: main
-
-      # actions/checkout leaves HEAD detached. npm version creates its commit
-      # on HEAD, so we need to be on the main branch ref for that commit to
-      # advance main and get pushed.
-      - name: Switch to main branch
-        run: git checkout main
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -75,21 +70,39 @@ jobs:
         working-directory: ${{ inputs.package-path }}
         env:
           BUMP_TYPE: ${{ inputs.bump-type }}
-          PACKAGE_NAME: ${{ inputs.package-name }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          npm version "$BUMP_TYPE" --message "chore: release ${PACKAGE_NAME} v%s [skip ci]"
+        run: npm version "$BUMP_TYPE" --no-git-tag-version
 
-      - name: Push
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
         run: |
-          # Guard: refuse to push if npm version didn't actually advance main.
-          # Prevents silently republishing the previous version downstream.
-          LOCAL=$(git rev-parse HEAD)
-          REMOTE=$(git rev-parse origin/main)
-          if [ "$LOCAL" = "$REMOTE" ]; then
-            echo "::error::npm version did not create a new commit on main; refusing to push a no-op."
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=Bump npm version::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
             exit 1
           fi
-          git push origin main
-          git push origin --tags
+          echo "Commit script: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
+
+      - name: Checkout commit script
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .sign-commit-action
+          sparse-checkout: /scripts/sign-commit/sign-commit
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Commit and tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE_NAME: ${{ inputs.package-name }}
+          NEW_VERSION: ${{ steps.resolve-version.outputs.new-version }}
+        run: |
+          EXPECTED_HEAD=$(git rev-parse HEAD)
+          export EXPECTED_HEAD
+          message="chore: release ${PACKAGE_NAME} ${NEW_VERSION} [skip ci]"
+          url=$(git diff -z --name-only | .sign-commit-action/scripts/sign-commit/sign-commit -z main "$message")
+          sha=${url##*/}
+          tag_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/tags" -f tag="$NEW_VERSION" -f message="$message" -f object="$sha" -f type=commit --jq .sha)
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${NEW_VERSION}" -f sha="$tag_sha" >/dev/null

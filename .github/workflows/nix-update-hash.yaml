@@ -48,6 +48,17 @@ jobs:
       - name: Update nix vendor hash
         run: task ${{ inputs.task-command }}
 
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=Nix update hash::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+          echo "Commit script: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
+
       - name: Checkout commit script
         uses: actions/checkout@v6
         with:
@@ -66,4 +77,6 @@ jobs:
           COMMIT_MESSAGE: ${{ inputs.commit-message }}
         run: |
           git diff --exit-code -- "$FLAKE_PATH" && exit 0
+          EXPECTED_HEAD=$(git rev-parse HEAD)
+          export EXPECTED_HEAD
           .sign-commit-action/scripts/sign-commit/sign-commit "$BRANCH" "$COMMIT_MESSAGE" "$FLAKE_PATH"
