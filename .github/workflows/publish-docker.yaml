@@ -36,6 +36,11 @@ on:
         type: string
         description: "The GitHub organization used in the container registry path (e.g. `milo-os`). Defaults to `datum-cloud`."
         default: "datum-cloud"
+      drop-distrusted-roots:
+        required: false
+        type: boolean
+        description: "Remove CA roots that browsers no longer trust (the eMudhra emSign C1, C3 and G3 roots) from the image's CA certificate files before pushing"
+        default: true
     secrets:
       build-secrets:
         required: false
@@ -70,6 +75,34 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: Check workflow commit
+        if: inputs.drop-distrusted-roots
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=Drop distrusted roots::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+
+      - name: Checkout root filter
+        if: inputs.drop-distrusted-roots
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .drop-distrusted-roots-action
+          sparse-checkout: |
+            /scripts/drop-distrusted-roots/Dockerfile
+            /scripts/drop-distrusted-roots/filter.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Move root filter out of the workspace
+        if: inputs.drop-distrusted-roots
+        run: mv "$GITHUB_WORKSPACE/.drop-distrusted-roots-action/scripts/drop-distrusted-roots" "$RUNNER_TEMP/drop-distrusted-roots" && rm -rf "$GITHUB_WORKSPACE/.drop-distrusted-roots-action"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -132,7 +165,8 @@ jobs:
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile-path }}
-          push: true
+          push: ${{ !inputs.drop-distrusted-roots }}
+          outputs: ${{ inputs.drop-distrusted-roots && format('type=oci,dest={0}/app-image,tar=false,name=app:latest', runner.temp) || '' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: ${{ inputs.platforms }}
@@ -147,3 +181,14 @@ jobs:
             SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}
             ${{ inputs.extra-build-args }}
           secrets: ${{ secrets.build-secrets }}
+
+      - name: Drop distrusted roots and push
+        if: inputs.drop-distrusted-roots
+        uses: docker/build-push-action@v7.1.0
+        with:
+          context: ${{ runner.temp }}/drop-distrusted-roots
+          build-contexts: app=oci-layout://${{ runner.temp }}/app-image:latest
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: ${{ inputs.platforms }}
