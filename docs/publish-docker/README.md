@@ -13,6 +13,8 @@ pushes a Docker image to **GitHub Container Registry**.
   registry path (e.g. `milo-os`). Defaults to `datum-cloud`.
 - **extra-build-args** (optional): Additional build arguments to pass to docker build
   in multiline string format.
+- **drop-distrusted-roots** (optional, default `true`): Remove distrusted CA roots
+  from the image before pushing. See [Distrusted CA roots](#distrusted-ca-roots).
 
 ### Secrets
 
@@ -51,6 +53,24 @@ RUN go build -ldflags="-X k8s.io/component-base/version.gitVersion=${VERSION} \
     -X k8s.io/component-base/version.buildDate=${BUILD_DATE}" \
     -o app ./cmd/app
 ```
+
+## Distrusted CA roots
+
+Base images such as distroless and Debian still ship the eMudhra emSign Root CA
+C1, ECC Root CA C3 and ECC Root CA G3, which Mozilla and the major browsers no
+longer trust. By default the workflow builds your Dockerfile, then adds one
+layer that rewrites every CA certificate file holding one of those roots
+without it, so the image only trusts what browsers trust. Image config,
+entrypoint and user are unchanged, and an image with no such files gets an
+empty layer.
+
+The filter is `scripts/drop-distrusted-roots/filter.sh`. It reads bundles under
+`/etc/ssl`, `/etc/pki`, `/usr/share/ca-certificates` and
+`/usr/local/share/ca-certificates`, drops roots by SHA-256 fingerprint, and
+writes a root's own file empty so OpenSSL's hashed symlinks to it no longer
+resolve. It does not touch language-specific stores such as Python's certifi
+or Java's `cacerts`. Set `drop-distrusted-roots: false` to push the Dockerfile's
+output unchanged.
 
 ## Best Practices
 

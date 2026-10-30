@@ -15,6 +15,7 @@ Builds and pushes Docker images to GitHub Container Registry (ghcr.io).
 **Inputs:**
 - `image-name` (required): The image name excluding the registry (e.g., `cloud-portal`)
 - `extra-build-args` (optional): Additional build arguments in multiline string format
+- `drop-distrusted-roots` (optional, default `true`): Builds the Dockerfile to a local OCI layout, then adds a layer from `scripts/drop-distrusted-roots/` that rewrites the image's CA certificate files without the eMudhra emSign C1, C3 and G3 roots, and pushes that. `test-drop-distrusted-roots.yaml` runs the filter tests and the same two builds on a distroless fixture. See [`docs/publish-docker/`](docs/publish-docker/README.md#distrusted-ca-roots).
 
 **Automatic Build Arguments:**
 The workflow automatically injects these build arguments:
