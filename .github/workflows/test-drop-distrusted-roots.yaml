@@ -43,16 +43,20 @@ jobs:
         with:
           platforms: linux/amd64,linux/arm64
       - name: Build fixture image
+        id: app
         uses: docker/build-push-action@v7.1.0
         with:
           context: scripts/drop-distrusted-roots/testdata/image
           platforms: linux/amd64,linux/arm64
-          outputs: type=oci,dest=${{ runner.temp }}/app-image,tar=false,name=app:latest
+          outputs: type=oci,dest=${{ runner.temp }}/app-image,tar=false
+          tags: |
+            ghcr.io/datum-cloud/drop-distrusted-roots-test:v0.0.0-main
+            ghcr.io/datum-cloud/drop-distrusted-roots-test:v1.2.3
       - name: Drop distrusted roots
         uses: docker/build-push-action@v7.1.0
         with:
           context: scripts/drop-distrusted-roots
-          build-contexts: app=oci-layout://${{ runner.temp }}/app-image:latest
+          build-contexts: app=oci-layout://${{ runner.temp }}/app-image@${{ steps.app.outputs.digest }}
           platforms: linux/amd64,linux/arm64
           outputs: type=local,dest=${{ runner.temp }}/rootfs
       - name: Check bundles

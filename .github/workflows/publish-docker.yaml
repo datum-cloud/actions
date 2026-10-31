@@ -166,7 +166,7 @@ jobs:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile-path }}
           push: ${{ !inputs.drop-distrusted-roots }}
-          outputs: ${{ inputs.drop-distrusted-roots && format('type=oci,dest={0}/app-image,tar=false,name=app:latest', runner.temp) || '' }}
+          outputs: ${{ inputs.drop-distrusted-roots && format('type=oci,dest={0}/app-image,tar=false', runner.temp) || '' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: ${{ inputs.platforms }}
@@ -187,7 +187,7 @@ jobs:
         uses: docker/build-push-action@v7.1.0
         with:
           context: ${{ runner.temp }}/drop-distrusted-roots
-          build-contexts: app=oci-layout://${{ runner.temp }}/app-image:latest
+          build-contexts: app=oci-layout://${{ runner.temp }}/app-image@${{ steps.push.outputs.digest }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
