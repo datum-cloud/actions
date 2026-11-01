@@ -46,8 +46,8 @@ jobs:
       CI_PATH: ${{ inputs.path }}
       SKIP_STEPS: ${{ inputs.skip }}
       EXTRA_RUN: ${{ inputs.run }}
-      DOCKERFILE: ${{ inputs.dockerfile }}
-      DOCKER_CONTEXT: ${{ inputs.docker-context }}
+      CI_DOCKERFILE: ${{ inputs.dockerfile }}
+      CI_DOCKER_CONTEXT: ${{ inputs.docker-context }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

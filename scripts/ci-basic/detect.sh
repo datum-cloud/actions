@@ -2,7 +2,7 @@
 set -euo pipefail
 
 dir=${CI_PATH:-.}
-dockerfile=${DOCKERFILE:-Dockerfile}
+dockerfile=${CI_DOCKERFILE:-Dockerfile}
 out=${GITHUB_OUTPUT:-/dev/stdout}
 
 [[ -d $dir ]] || { echo "::error title=ci-basic::path '$dir' is not a directory"; exit 2; }

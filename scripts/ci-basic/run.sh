@@ -69,7 +69,7 @@ case $stage in
     fi
     ;;
   docker)
-    step docker docker build -f "${DOCKERFILE:?}" "${DOCKER_CONTEXT:-.}"
+    step docker docker build -f "${CI_DOCKERFILE:?}" "${CI_DOCKER_CONTEXT:-.}"
     ;;
   extra)
     echo "::group::$EXTRA_RUN"
