@@ -19,7 +19,7 @@ on:
         required: false
         type: number
         description: "Node.js version to use"
-        default: 24
+        default: 26
     outputs:
       new-version:
         description: "The new version after bumping (e.g. `v1.3.0`)"
