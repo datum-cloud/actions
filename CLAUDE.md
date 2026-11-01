@@ -157,6 +157,12 @@ Scans the calling repo's source for signs of injected code with Semgrep and fail
 
 Suppressions go only in the ignore file, as `[[Ignore]]` entries with `rule`, one exact `path` (no globs), `reason`, and an `ignoreUntil` at most 12 months out. Callers protect the file with CODEOWNERS. Exit codes: 0 clean, 1 findings, 2 scanner or configuration error. The job has a 30-minute limit because Semgrep runs with `--timeout 0`. `scripts/code-scan/test-code-scan.sh`, run by `test-code-scan.yaml`, asserts that payload fixtures in `scripts/code-scan/testdata` fail and the clean one passes; any workflow here that scans the repo root must exclude `scripts/code-scan/testdata`. See [`docs/code-scan/`](docs/code-scan/README.md).
 
+### 10. Basic CI (`.github/workflows/ci-basic.yaml`)
+
+Builds and tests the calling repo without publishing, for repos with no CI of their own. In `path` it detects Node (npm, pnpm or bun by lockfile; runs `typecheck`, `lint`, `build`, `test` scripts that exist), Go (`go build`, `go test`), Python with Poetry (`poetry install`, `pytest` when test files exist) and a Dockerfile (`docker build`, no push). Logic lives in `scripts/ci-basic/*.sh`, sparse-checked-out at the workflow's own commit like vuln-scan. `test-ci-basic.yaml` runs it on fixtures in `scripts/ci-basic/testdata`; the Node fixture's `lint` script fails on purpose, so a broken `skip` fails the test.
+
+**Inputs:** `path`, `skip` (any of `typecheck`, `lint`, `build`, `test`, `docker`), `run` (extra command), `dockerfile`, `docker-context`, `node-version`, `python-version`. See [`docs/ci-basic/`](docs/ci-basic/README.md).
+
 ## Common Development Commands
 
 ### Linting Workflows

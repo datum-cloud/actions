@@ -1,0 +1,147 @@
+name: Basic CI
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Project directory, relative to the repository root
+        type: string
+        default: "."
+      skip:
+        description: Comma- or space-separated steps not to run, from typecheck, lint, build, test, docker
+        type: string
+        default: ""
+      run:
+        description: Extra shell command to run in `path` after the detected steps
+        type: string
+        default: ""
+      dockerfile:
+        description: Dockerfile to build without pushing, relative to `path`; skipped when the file does not exist
+        type: string
+        default: Dockerfile
+      docker-context:
+        description: Docker build context, relative to `path`
+        type: string
+        default: "."
+      node-version:
+        description: Node.js version when `path` has no .nvmrc or .node-version
+        type: string
+        default: lts/*
+      python-version:
+        description: Python version when `path` has no .python-version
+        type: string
+        default: "3.12"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      CI_PATH: ${{ inputs.path }}
+      SKIP_STEPS: ${{ inputs.skip }}
+      EXTRA_RUN: ${{ inputs.run }}
+      DOCKERFILE: ${{ inputs.dockerfile }}
+      DOCKER_CONTEXT: ${{ inputs.docker-context }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=ci-basic::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+          echo "CI scripts: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
+
+      - name: Checkout CI scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .ci-basic-action
+          sparse-checkout: |
+            /scripts/ci-basic/*.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Move CI scripts out of the workspace
+        run: |
+          mv "$GITHUB_WORKSPACE/.ci-basic-action" "$RUNNER_TEMP/ci-basic-action"
+          echo "SCRIPTS=$RUNNER_TEMP/ci-basic-action/scripts/ci-basic" >> "$GITHUB_ENV"
+
+      - name: Check skip input
+        run: bash "$SCRIPTS/run.sh" check-skip
+
+      - name: Detect project
+        id: detect
+        run: bash "$SCRIPTS/detect.sh"
+
+      - name: Install pnpm
+        if: steps.detect.outputs.node-pm == 'pnpm'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ steps.detect.outputs.pnpm-version }}
+          package_json_file: ${{ inputs.path }}/package.json
+
+      - name: Install Bun
+        if: steps.detect.outputs.node-pm == 'bun'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      - name: Install Node.js
+        if: steps.detect.outputs.node-pm != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ steps.detect.outputs.node-version-file == '' && inputs.node-version || '' }}
+          node-version-file: ${{ steps.detect.outputs.node-version-file }}
+
+      - name: Install Go
+        if: steps.detect.outputs.go == 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ${{ inputs.path }}/go.mod
+          cache: false
+
+      - name: Install Python
+        if: steps.detect.outputs.python == 'true'
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ steps.detect.outputs.python-version-file == '' && inputs.python-version || '' }}
+          python-version-file: ${{ steps.detect.outputs.python-version-file }}
+
+      - name: Install Poetry
+        if: steps.detect.outputs.python == 'true'
+        run: pipx install poetry
+
+      - name: Node
+        if: steps.detect.outputs.node-pm != ''
+        env:
+          NODE_PM: ${{ steps.detect.outputs.node-pm }}
+        run: bash "$SCRIPTS/run.sh" node
+
+      - name: Go
+        if: steps.detect.outputs.go == 'true'
+        run: bash "$SCRIPTS/run.sh" go
+
+      - name: Python
+        if: steps.detect.outputs.python == 'true'
+        run: bash "$SCRIPTS/run.sh" python
+
+      - name: Docker build
+        if: steps.detect.outputs.docker == 'true'
+        run: bash "$SCRIPTS/run.sh" docker
+
+      - name: Run command
+        if: inputs.run != ''
+        run: bash "$SCRIPTS/run.sh" extra
