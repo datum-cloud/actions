@@ -18,6 +18,7 @@ available for use across the organization.
 
 ### Validation & Linting
 
+- [**Basic CI**](./ci-basic/) - Build and test a repository without publishing: Node, Go, Python (Poetry) and Dockerfile builds, each when present
 - [**Lint GitHub Actions Workflows**](./lint-workflows/) - Validate workflow files using actionlint to catch errors and best practice violations
 - [**Validate Kustomize Configurations**](./validate-kustomize/) - Validate all Kustomize configurations by building them and checking for errors
 - [**Code Scan**](./code-scan/) - Scan source for injected code, such as process execution, dynamic code execution, and downloads piped into a shell, and fail on any finding that the central ignore file doesn't cover

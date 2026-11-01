@@ -21,3 +21,6 @@ paths:
   .github/workflows/publish-docker.yaml:
     ignore:
       - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/ci-basic.yaml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'

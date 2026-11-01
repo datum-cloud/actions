@@ -1,0 +1,10 @@
+{
+  "name": "ci-basic-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "exit 1",
+    "build": "node -e \"require('fs').writeFileSync('built.txt', 'ok')\"",
+    "test": "node -e \"require('fs').readFileSync('built.txt')\""
+  }
+}
