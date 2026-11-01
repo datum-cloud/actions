@@ -12,7 +12,7 @@ branch, it regenerates the TOC and commits the result automatically.
 | Input | Required | Default | Description |
 |---|---|---|---|
 | `docs-path` | No | `docs/` | Path to the directory containing markdown docs |
-| `node-version` | No | `20` | Node.js version to use |
+| `node-version` | No | `26` | Node.js version to use |
 
 ### Required Permissions
 

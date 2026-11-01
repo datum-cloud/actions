@@ -13,7 +13,7 @@ version bump type from PR labels (`release:major`, `release:minor`, or
 - **package-name** (required): The npm package name (e.g. `@datum-cloud/datum-ui`).
 - **package-path** (required): Path to the package directory relative to the
   repo root (e.g. `packages/datum-ui`).
-- **node-version** (optional, default: `24`): Node.js version to use.
+- **node-version** (optional, default: `26`): Node.js version to use.
 
 ## Outputs
 

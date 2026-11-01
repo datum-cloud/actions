@@ -49,7 +49,7 @@ Publishes npm packages with two modes: dev builds on every push to main, and sta
 **Inputs:**
 - `package-name` (required): The npm package name (e.g. `@datum-cloud/datum-ui`)
 - `package-path` (required): Path to the package directory relative to the repo root
-- `node-version` (optional, default 24): Node.js version to use
+- `node-version` (optional, default 26): Node.js version to use
 - `release-mode` (optional, default `dev`): Publishing mode — `dev` or `release`
 
 **Outputs:**
