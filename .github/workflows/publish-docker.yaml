@@ -161,7 +161,7 @@ jobs:
 
       - name: Build and Push Docker Image
         id: push
-        uses: docker/build-push-action@v7.1.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ${{ inputs.context }}
           file: ${{ inputs.dockerfile-path }}
@@ -184,7 +184,7 @@ jobs:
 
       - name: Drop distrusted roots and push
         if: inputs.drop-distrusted-roots
-        uses: docker/build-push-action@v7.1.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ${{ runner.temp }}/drop-distrusted-roots
           build-contexts: app=oci-layout://${{ runner.temp }}/app-image@${{ steps.push.outputs.digest }}
