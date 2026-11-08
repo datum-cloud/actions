@@ -41,6 +41,11 @@ on:
         type: boolean
         description: "Remove CA roots that browsers no longer trust (the eMudhra emSign C1, C3 and G3 roots) from the image's CA certificate files before pushing"
         default: true
+      timeout-minutes:
+        required: false
+        type: number
+        description: "Maximum minutes the build job may run before GitHub cancels it. Defaults to 60, over 2x the slowest normal build seen across consumers (23 minutes)."
+        default: 60
     secrets:
       build-secrets:
         required: false
@@ -69,6 +74,7 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     outputs:
       tag: ${{ steps.version-tag.outputs.tag }}
       build-version: ${{ steps.version-tag.outputs.build_version }}

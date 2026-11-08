@@ -15,6 +15,10 @@ pushes a Docker image to **GitHub Container Registry**.
   in multiline string format.
 - **drop-distrusted-roots** (optional, default `true`): Remove distrusted CA roots
   from the image before pushing. See [Distrusted CA roots](#distrusted-ca-roots).
+- **timeout-minutes** (optional, default `60`): Maximum minutes the build job may run
+  before GitHub cancels it, instead of waiting for the 6 hour default. Normal builds
+  across consumers take 1-23 minutes (p95 up to 16); raise it only for a build that
+  legitimately runs longer, such as a multi-arch build under QEMU.
 
 ### Secrets
 
