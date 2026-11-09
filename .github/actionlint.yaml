@@ -24,3 +24,15 @@ paths:
   .github/workflows/ci-basic.yaml:
     ignore:
       - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/plugin-catalog-validate.yaml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/plugin-catalog-index.yaml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/plugin-catalog-scan.yaml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/plugin-catalog-health.yaml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'

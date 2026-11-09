@@ -1,0 +1,162 @@
+name: Rebuild plugin catalog index
+
+# Rebuilds a datumctl plugin catalog's index.yaml from plugins/*.yaml and opens
+# or refreshes a pull request with the result, set to merge once the branch's
+# required checks pass. Callers run it on pushes to the default branch that
+# change plugins/. See docs/plugin-catalog/README.md.
+#
+# The pull request is opened with a GitHub App token the caller provides, not
+# GITHUB_TOKEN: GitHub holds the workflow runs of anything GITHUB_TOKEN pushes
+# until a maintainer approves them, so the required checks would never report
+# on their own. The token is minted in this job because a token passed between
+# jobs arrives empty.
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Catalog root, relative to the repository root
+        type: string
+        default: "."
+      name:
+        description: Catalog name written into the index header, shown by `datumctl plugin index list` (optional)
+        type: string
+        default: ""
+      description:
+        description: Catalog description written into the index header (optional)
+        type: string
+        default: ""
+      owner:
+        description: Catalog owner written into the index header (optional)
+        type: string
+        default: ""
+      homepage:
+        description: Catalog homepage written into the index header (optional)
+        type: string
+        default: ""
+      branch:
+        description: Branch the rebuild pull request is opened from
+        type: string
+        default: regenerate-index
+      auto-merge:
+        description: Set the rebuild pull request to merge once the required checks pass
+        type: boolean
+        default: true
+    secrets:
+      app-id:
+        description: ID of a GitHub App installed on the catalog with contents and pull request write
+        required: true
+      app-private-key:
+        description: Private key of that GitHub App
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild:
+    name: Rebuild index
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    # Two quick merges must not race on the rebuild branch.
+    concurrency:
+      group: plugin-catalog-index-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      CATALOG: ${{ inputs.path }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=Plugin catalog::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+          echo "Catalog scripts: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
+
+      - name: Checkout catalog scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .plugin-catalog-action
+          sparse-checkout: |
+            /scripts/plugin-catalog/catalog.py
+            /scripts/plugin-catalog/install-deps.sh
+            /scripts/plugin-catalog/requirements.txt
+            /scripts/plugin-catalog/schema/*.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Move catalog scripts out of the workspace
+        run: |
+          mv "$GITHUB_WORKSPACE/.plugin-catalog-action" "$RUNNER_TEMP/plugin-catalog-action"
+          echo "SCRIPTS=$RUNNER_TEMP/plugin-catalog-action/scripts/plugin-catalog" >> "$GITHUB_ENV"
+
+      - name: Install Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install libraries
+        run: echo "PYTHON=$(bash "$SCRIPTS/install-deps.sh")" >> "$GITHUB_ENV"
+
+      - name: Rebuild index.yaml
+        id: rebuild
+        env:
+          INDEX_NAME: ${{ inputs.name }}
+          INDEX_DESCRIPTION: ${{ inputs.description }}
+          INDEX_OWNER: ${{ inputs.owner }}
+          INDEX_HOMEPAGE: ${{ inputs.homepage }}
+        run: |
+          "$PYTHON" "$SCRIPTS/catalog.py" --catalog "$CATALOG" index \
+            --name "$INDEX_NAME" --description "$INDEX_DESCRIPTION" \
+            --owner "$INDEX_OWNER" --homepage "$INDEX_HOMEPAGE"
+          root=$(realpath --relative-to=. "$CATALOG")
+          if [[ $root == . ]]; then
+            echo "index=index.yaml" >> "$GITHUB_OUTPUT"
+          else
+            echo "index=$root/index.yaml" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Mint a catalog token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.app-id }}
+          private-key: ${{ secrets.app-private-key }}
+
+      # When index.yaml already matches, this closes any open rebuild pull
+      # request and deletes its branch.
+      - name: Open or update the rebuild pull request
+        id: pr
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          base: ${{ github.event.repository.default_branch }}
+          branch: ${{ inputs.branch }}
+          delete-branch: true
+          sign-commits: true
+          add-paths: ${{ steps.rebuild.outputs.index }}
+          commit-message: "chore: Rebuild the plugin index"
+          title: "chore: Rebuild the plugin index"
+          body: |
+            Rebuilds `index.yaml`, the file datumctl reads, from `plugins/*.yaml` as of ${{ github.sha }}.
+
+            The Rebuild plugin catalog index workflow opened this pull request.
+
+      - name: Merge once the required checks pass
+        if: inputs.auto-merge && steps.pr.outputs.pull-request-number != '' && steps.pr.outputs.pull-request-operation != 'closed'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.pull-request-number }}
+        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge

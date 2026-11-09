@@ -164,6 +164,12 @@ Builds and tests the calling repo without publishing, for repos with no CI of th
 
 **Inputs:** `path`, `skip` (any of `typecheck`, `lint`, `build`, `test`, `docker`), `run` (extra command), `dockerfile`, `docker-context`, `node-version`, `python-version`. See [`docs/ci-basic/`](docs/ci-basic/README.md).
 
+### 11. Plugin Catalog (`.github/workflows/plugin-catalog-{validate,index,scan,health}.yaml`)
+
+Runs a datumctl plugin catalog: a repo with `plugins/<name>.yaml` manifests and an `index.yaml` built from them. `plugin-catalog-validate.yaml` (every PR) checks each manifest against `scripts/plugin-catalog/schema/plugin-v1alpha1.json`, runs `datumctl plugin index validate` on the built index, and downloads the archives of manifests the PR changes to check each `sha256`; `check-name` lets the job match a required status check. `plugin-catalog-index.yaml` (pushes that change `plugins/`) rebuilds `index.yaml` and opens a PR with it, set to auto-merge. `plugin-catalog-scan.yaml` (daily) opens or refreshes an update PR for each plugin whose upstream published a newer release, reusing the PR the `update-plugin-index` action opened. `plugin-catalog-health.yaml` (weekly) re-checks every archive and index drift and opens an issue on failure. The index and scan workflows take `app-id` and `app-private-key` secrets and mint the App token in their own job, because GitHub holds workflow runs on anything `GITHUB_TOKEN` pushes until a maintainer approves them.
+
+Logic lives in `scripts/plugin-catalog/` (`catalog.py`, `scan_releases.py`, installers), sparse-checked-out at the workflow's own commit like vuln-scan; the scan also takes `scripts/sign-commit/sign-commit`. Python libraries are hash-pinned in `requirements.txt` (generated from `requirements.in`), and `install-datumctl.sh` pins the `datumctl` release and checks it against the release's checksums; Renovate bumps both. The schema may be stricter than `datumctl`, never looser: `test_catalog.py` fails when the schema accepts a manifest `datumctl` rejects. `test-plugin-catalog.yaml` runs the tests and calls the validate and health workflows on `scripts/plugin-catalog/testdata/catalog`. See [`docs/plugin-catalog/`](docs/plugin-catalog/README.md).
+
 ## Common Development Commands
 
 ### Linting Workflows

@@ -1,0 +1,22 @@
+apiVersion: datumctl.datum.net/v1alpha1
+kind: PluginList
+name: fixture
+description: Fixture catalog for the workflow tests
+owner: datum-cloud
+homepage: https://github.com/datum-cloud/actions
+items:
+- apiVersion: datumctl.datum.net/v1alpha1
+  kind: Plugin
+  metadata:
+    name: sample
+  spec:
+    shortDescription: Fixture plugin for the catalog workflow tests
+    homepage: https://github.com/datum-cloud/actions
+    version: v0.23.3
+    platforms:
+    - selector:
+        matchLabels:
+          os: linux
+          arch: amd64
+      uri: https://github.com/datum-cloud/datumctl/releases/download/v0.23.3/datumctl_0.23.3_checksums.txt
+      sha256: f026ff950597c441da52b976b399f5194e28919423e82afa4f4704f0176673f1

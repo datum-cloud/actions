@@ -1,0 +1,137 @@
+name: Check plugin catalog health
+
+# Re-checks every plugin in a datumctl plugin catalog: the schema, the index
+# against `datumctl plugin index validate`, every download URL and sha256, and
+# that index.yaml still matches plugins/. Release assets live in other
+# repositories and can be deleted or re-cut after a plugin lands, and a failing
+# index rebuild leaves users on old versions, so neither is caught by pull
+# request checks alone. On failure it opens an issue, or comments on the open
+# one. Callers run it weekly. See docs/plugin-catalog/README.md.
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Catalog root, relative to the repository root
+        type: string
+        default: "."
+      name:
+        description: Catalog name in the index header, as given to the rebuild workflow
+        type: string
+        default: ""
+      description:
+        description: Catalog description in the index header, as given to the rebuild workflow
+        type: string
+        default: ""
+      owner:
+        description: Catalog owner in the index header, as given to the rebuild workflow
+        type: string
+        default: ""
+      homepage:
+        description: Catalog homepage in the index header, as given to the rebuild workflow
+        type: string
+        default: ""
+      label:
+        description: Label that marks the catalog health issue
+        type: string
+        default: catalog-health
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    name: Check catalog health
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    env:
+      CATALOG: ${{ inputs.path }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=Plugin catalog::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+          echo "Catalog scripts: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
+
+      - name: Checkout catalog scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .plugin-catalog-action
+          sparse-checkout: |
+            /scripts/plugin-catalog/catalog.py
+            /scripts/plugin-catalog/install-deps.sh
+            /scripts/plugin-catalog/install-datumctl.sh
+            /scripts/plugin-catalog/requirements.txt
+            /scripts/plugin-catalog/schema/*.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Move catalog scripts out of the workspace
+        run: |
+          mv "$GITHUB_WORKSPACE/.plugin-catalog-action" "$RUNNER_TEMP/plugin-catalog-action"
+          echo "SCRIPTS=$RUNNER_TEMP/plugin-catalog-action/scripts/plugin-catalog" >> "$GITHUB_ENV"
+
+      - name: Install Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: |
+          echo "PYTHON=$(bash "$SCRIPTS/install-deps.sh")" >> "$GITHUB_ENV"
+          echo "DATUMCTL=$(bash "$SCRIPTS/install-datumctl.sh")" >> "$GITHUB_ENV"
+
+      - name: Check every manifest and archive
+        run: |
+          "$PYTHON" "$SCRIPTS/catalog.py" --catalog "$CATALOG" validate \
+            --datumctl "$DATUMCTL" --download all
+
+      # The rebuild workflow keeps index.yaml in step with plugins/ on every
+      # merge, so drift here means that workflow, or its pull request, is stuck.
+      - name: Check that index.yaml matches plugins/
+        if: ${{ !cancelled() }}
+        env:
+          INDEX_NAME: ${{ inputs.name }}
+          INDEX_DESCRIPTION: ${{ inputs.description }}
+          INDEX_OWNER: ${{ inputs.owner }}
+          INDEX_HOMEPAGE: ${{ inputs.homepage }}
+        run: |
+          "$PYTHON" "$SCRIPTS/catalog.py" --catalog "$CATALOG" index --check \
+            --name "$INDEX_NAME" --description "$INDEX_DESCRIPTION" \
+            --owner "$INDEX_OWNER" --homepage "$INDEX_HOMEPAGE"
+
+      - name: Open or update the catalog health issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LABEL: ${{ inputs.label }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create "$LABEL" --repo "$GITHUB_REPOSITORY" --color b60205 \
+            --description "The scheduled plugin catalog check failed" 2>/dev/null || true
+          body=$(printf '%s\n\n%s\n\n%s\n' \
+            "The scheduled catalog health check failed. A plugin download URL no longer resolves, an archive no longer matches its sha256, a manifest fails validation, or index.yaml no longer matches plugins/." \
+            "Until this is fixed, datumctl users may be unable to install the affected plugins or may not see their current versions." \
+            "The failing step is in $RUN_URL")
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label "$LABEL" --json number --jq '.[0].number // empty')
+          if [[ -n $number ]]; then
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "Plugin catalog health check is failing" \
+              --label "$LABEL" --body "$body"
+          fi

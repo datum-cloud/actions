@@ -1,0 +1,136 @@
+name: Validate plugin catalog
+
+# Checks a datumctl plugin catalog: every manifest in plugins/*.yaml against
+# the schema in scripts/plugin-catalog/schema, the index those manifests build
+# against `datumctl plugin index validate`, and the download URLs and sha256
+# of the manifests a pull request changes. Callers run it on every pull
+# request. See docs/plugin-catalog/README.md.
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Catalog root, relative to the repository root
+        type: string
+        default: "."
+      download:
+        description: >-
+          Whose archives to download and check: `changed` (the manifests a pull
+          request changes; nothing on other events), `all`, or `none`
+        type: string
+        default: changed
+      check-name:
+        description: >-
+          Name of the job, so a caller can match the status check its branch
+          rules require (the check shows as `<caller job> / <check-name>`)
+        type: string
+        default: Validate plugin catalog
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: ${{ inputs.check-name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      CATALOG: ${{ inputs.path }}
+      DOWNLOAD: ${{ inputs.download }}
+    steps:
+      # fetch-depth 2 keeps the pull request merge commit's base parent, which
+      # is what the changed manifests are listed against.
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # job.workflow_* name this reusable workflow's own repository and commit,
+      # so the scripts always match the workflow version the caller pinned.
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=Plugin catalog::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+          echo "Catalog scripts: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
+
+      - name: Checkout catalog scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .plugin-catalog-action
+          sparse-checkout: |
+            /scripts/plugin-catalog/catalog.py
+            /scripts/plugin-catalog/install-deps.sh
+            /scripts/plugin-catalog/install-datumctl.sh
+            /scripts/plugin-catalog/requirements.txt
+            /scripts/plugin-catalog/schema/*.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Move catalog scripts out of the workspace
+        run: |
+          mv "$GITHUB_WORKSPACE/.plugin-catalog-action" "$RUNNER_TEMP/plugin-catalog-action"
+          echo "SCRIPTS=$RUNNER_TEMP/plugin-catalog-action/scripts/plugin-catalog" >> "$GITHUB_ENV"
+
+      - name: Install Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: |
+          echo "PYTHON=$(bash "$SCRIPTS/install-deps.sh")" >> "$GITHUB_ENV"
+          echo "DATUMCTL=$(bash "$SCRIPTS/install-datumctl.sh")" >> "$GITHUB_ENV"
+
+      # On a pull request, the changed manifests are the plugins/ files that
+      # differ between the merge commit and its first parent, the base branch.
+      # The second parent must be the pull request's head, so a stale merge
+      # commit can't hide a change.
+      - name: List changed manifests
+        id: changed
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          case "$DOWNLOAD" in
+            all | none) echo "targets=$DOWNLOAD" >> "$GITHUB_OUTPUT"; exit 0 ;;
+            changed) ;;
+            *) echo "::error title=Plugin catalog::download must be changed, all or none, not '$DOWNLOAD'"; exit 1 ;;
+          esac
+          if [[ $EVENT_NAME != pull_request && $EVENT_NAME != pull_request_target ]]; then
+            echo "Not a pull request, so no manifest counts as changed and nothing is downloaded."
+            echo "targets=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          second=$(git rev-parse --verify --quiet 'HEAD^2^{commit}') || {
+            echo "::error title=Plugin catalog::the checkout is not a pull request merge commit, so the changed manifests can't be listed"
+            exit 1
+          }
+          if [[ $second != "$PULL_REQUEST_HEAD_SHA" ]]; then
+            echo "::error title=Plugin catalog::the merge commit's second parent ($second) is not the pull request's head ($PULL_REQUEST_HEAD_SHA); re-run once GitHub has rebuilt the merge commit"
+            exit 1
+          fi
+          root=$(realpath --relative-to=. "$CATALOG")
+          prefix=
+          [[ $root == . ]] || prefix=$root/
+          changed=$(git diff --name-only --diff-filter=AMR 'HEAD^1' HEAD -- "${prefix}plugins/*.yaml" |
+            sed "s|^${prefix}||" | tr '\n' ' ')
+          echo "Changed manifests: ${changed:-none}"
+          echo "targets=${changed:-none}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate the catalog
+        env:
+          TARGETS: ${{ steps.changed.outputs.targets }}
+        run: |
+          read -ra targets <<< "$TARGETS"
+          "$PYTHON" "$SCRIPTS/catalog.py" --catalog "$CATALOG" validate \
+            --datumctl "$DATUMCTL" --download "${targets[@]}"

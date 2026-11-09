@@ -1,0 +1,4 @@
+# Libraries for the plugin catalog scripts. requirements.txt is generated from
+# this file with hashes; see the header there.
+PyYAML==6.0.3
+jsonschema[format-nongpl]==4.26.0
