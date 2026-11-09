@@ -19,11 +19,22 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n[A-Z_]+_VERSION=(?<currentValue>\\S+)"
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "datumctl version pinned in the plugin catalog's installer",
+      "managerFilePatterns": [
+        "/^scripts/plugin-catalog/install-datumctl\\.sh$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n[A-Z_]+_VERSION=(?<currentValue>\\S+)"
+      ]
     }
   ],
   "pip-compile": {
     "managerFilePatterns": [
-      "/^scripts/code-scan/requirements\\.txt$/"
+      "/^scripts/code-scan/requirements\\.txt$/",
+      "/^scripts/plugin-catalog/requirements\\.txt$/"
     ]
   },
   "constraints": {
@@ -39,7 +50,8 @@
         "pip_requirements"
       ],
       "matchFileNames": [
-        "scripts/code-scan/requirements.txt"
+        "scripts/code-scan/requirements.txt",
+        "scripts/plugin-catalog/requirements.txt"
       ],
       "enabled": false
     }
