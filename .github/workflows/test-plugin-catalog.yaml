@@ -1,0 +1,59 @@
+name: Test plugin catalog
+
+on:
+  pull_request:
+    paths:
+      - "scripts/plugin-catalog/**"
+      - "scripts/sign-commit/**"
+      - ".github/workflows/plugin-catalog-*.yaml"
+      - ".github/workflows/test-plugin-catalog.yaml"
+  push:
+    paths:
+      - "scripts/plugin-catalog/**"
+      - "scripts/sign-commit/**"
+      - ".github/workflows/plugin-catalog-*.yaml"
+      - ".github/workflows/test-plugin-catalog.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)) }}
+
+jobs:
+  unit:
+    name: Unit and agreement tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: shellcheck scripts/plugin-catalog/*.sh
+      - run: bash scripts/plugin-catalog/test-plugin-catalog.sh
+
+  # The fixture's one archive is a small release asset, so this downloads and
+  # checks something real.
+  validate:
+    name: Validate the fixture catalog
+    uses: ./.github/workflows/plugin-catalog-validate.yaml
+    with:
+      path: scripts/plugin-catalog/testdata/catalog
+      download: all
+
+  health:
+    name: Check the fixture catalog's health
+    uses: ./.github/workflows/plugin-catalog-health.yaml
+    permissions:
+      contents: read
+      issues: write
+    with:
+      path: scripts/plugin-catalog/testdata/catalog
+      name: fixture
+      description: Fixture catalog for the workflow tests
+      owner: datum-cloud
+      homepage: https://github.com/datum-cloud/actions

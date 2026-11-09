@@ -1,0 +1,108 @@
+name: Scan plugin releases
+
+# Opens or refreshes a pull request for every plugin in a datumctl plugin
+# catalog whose upstream repository has published a newer release than the
+# catalog lists. A plugin's own release normally updates the catalog through
+# the update-plugin-index action; this is the backstop for when that push
+# fails. Callers run it daily. See docs/plugin-catalog/README.md.
+#
+# Commits and pull requests are made with a GitHub App token the caller
+# provides, so GitHub signs the commits and runs the catalog's checks on them
+# without a maintainer approving each run. The scan reuses the update
+# pull request the release action opened, so each plugin has one open update.
+
+on:
+  workflow_call:
+    inputs:
+      dry-run:
+        description: Report which plugins are behind without opening pull requests
+        type: boolean
+        default: false
+      plugin:
+        description: Scan only this plugin, by name (default all)
+        type: string
+        default: ""
+    secrets:
+      app-id:
+        description: ID of a GitHub App installed on the catalog with contents and pull request write
+        required: true
+      app-private-key:
+        description: Private key of that GitHub App
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan releases
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    concurrency:
+      group: plugin-catalog-scan-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      # Update branches start from this commit, so it must be the default branch.
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=Plugin catalog::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+          echo "Catalog scripts: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
+
+      - name: Checkout catalog scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .plugin-catalog-action
+          sparse-checkout: |
+            /scripts/plugin-catalog/scan_releases.py
+            /scripts/plugin-catalog/install-deps.sh
+            /scripts/plugin-catalog/requirements.txt
+            /scripts/sign-commit/sign-commit
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Move catalog scripts out of the workspace
+        run: |
+          mv "$GITHUB_WORKSPACE/.plugin-catalog-action" "$RUNNER_TEMP/plugin-catalog-action"
+          echo "SCRIPTS=$RUNNER_TEMP/plugin-catalog-action/scripts/plugin-catalog" >> "$GITHUB_ENV"
+
+      - name: Install Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install libraries
+        run: echo "PYTHON=$(bash "$SCRIPTS/install-deps.sh")" >> "$GITHUB_ENV"
+
+      - name: Mint a catalog token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ secrets.app-id }}
+          private-key: ${{ secrets.app-private-key }}
+
+      - name: Scan for newer releases
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DRY_RUN: ${{ inputs.dry-run }}
+          PLUGIN: ${{ inputs.plugin }}
+        run: |
+          args=()
+          [[ $DRY_RUN == true ]] && args+=(--dry-run)
+          [[ -n $PLUGIN ]] && args+=(--plugin "$PLUGIN")
+          "$PYTHON" "$SCRIPTS/scan_releases.py" "${args[@]}"
