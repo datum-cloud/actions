@@ -118,11 +118,20 @@ def catalog_repo():
         "gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner").stdout.strip()
 
 
-def open_pulls(catalog):
-    """Open PRs into main from the catalog's own branches: number, branch, head commit."""
+def base_branch(catalog):
+    """The catalog's default branch: BASE_BRANCH when the workflow sets it, else what gh reports."""
+    branch = os.environ.get("BASE_BRANCH") or run(
+        "gh", "repo", "view", catalog, "--json", "defaultBranchRef", "--jq", ".defaultBranchRef.name").stdout.strip()
+    if not branch:
+        sys.exit(f"could not find the default branch of {catalog}")
+    return branch
+
+
+def open_pulls(catalog, base):
+    """Open PRs into base from the catalog's own branches: number, branch, head commit."""
     jq = (f'.[] | select((.head.repo.full_name // "" | ascii_downcase) == "{catalog.lower()}")'
           " | {number, branch: .head.ref, sha: .head.sha}")
-    out = run("gh", "api", "--paginate", f"repos/{catalog}/pulls?state=open&base=main&per_page=100", "--jq", jq)
+    out = run("gh", "api", "--paginate", f"repos/{catalog}/pulls?state=open&base={base}&per_page=100", "--jq", jq)
     if out.returncode != 0:
         # Guessing "no open PRs" here would open duplicates, the thing this avoids.
         sys.exit(f"could not list the open PRs: {out.stderr.strip()}")
@@ -182,7 +191,7 @@ def plan(pr, why, name):
     return f"update #{pr['number']}" if pr else f"open a PR on update-plugin/{name}"
 
 
-def publish(path, name, newest, pr, body):
+def publish(path, name, newest, pr, body, base_ref):
     """Commit the manifest to the plugin's PR branch, then open or retitle the PR.
 
     The commit goes through the API so GitHub signs it. A reused branch is reset to the checked-out
@@ -201,7 +210,7 @@ def publish(path, name, newest, pr, body):
     if pr:
         run("gh", "pr", "edit", str(pr["number"]), "--repo", catalog_repo(), "--title", title, "--body", body)
     else:
-        run("gh", "pr", "create", "--repo", catalog_repo(), "--base", "main", "--head", branch,
+        run("gh", "pr", "create", "--repo", catalog_repo(), "--base", base_ref, "--head", branch,
             "--title", title, "--body", body)
     return None
 
@@ -216,7 +225,8 @@ def main():
     opened, skipped, behind = [], [], []
     matched = False
     catalog = catalog_repo()
-    pulls = open_pulls(catalog)
+    base = base_branch(catalog)
+    pulls = open_pulls(catalog, base)
 
     for filename in sorted(os.listdir(PLUGINS_DIR)):
         if not filename.endswith(".yaml"):
@@ -268,7 +278,7 @@ def main():
         with open(path, "w") as handle:
             handle.write(rewritten)
 
-        failure = publish(path, name, newest, pr, pr_body(name, repo, current, newest))
+        failure = publish(path, name, newest, pr, pr_body(name, repo, current, newest), base)
         if failure:
             skipped.append(f"{name}: {failure}")
             continue

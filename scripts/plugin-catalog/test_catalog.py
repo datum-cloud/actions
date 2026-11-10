@@ -186,6 +186,25 @@ class ScanTest(unittest.TestCase):
         self.assertTrue(linux["uri"].endswith("/v1.1.0/sample_Linux_x86_64.tar.gz"))
 
 
+class BaseBranchTest(unittest.TestCase):
+    def test_base_branch_comes_from_the_workflow(self):
+        original = os.environ.get("BASE_BRANCH")
+        os.environ["BASE_BRANCH"] = "trunk"
+        try:
+            self.assertEqual(scan_releases.base_branch("acme/catalog"), "trunk")
+        finally:
+            if original is None:
+                del os.environ["BASE_BRANCH"]
+            else:
+                os.environ["BASE_BRANCH"] = original
+
+    def test_no_pull_request_call_names_main(self):
+        with open(scan_releases.__file__) as handle:
+            source = handle.read()
+        self.assertNotIn("base=main", source)
+        self.assertNotIn('"--base", "main"', source)
+
+
 @unittest.skipUnless(os.environ.get("DATUMCTL"), "DATUMCTL is not set; test-plugin-catalog.sh sets it")
 class AgreementTest(unittest.TestCase):
     """The schema may be stricter than datumctl, never looser.
