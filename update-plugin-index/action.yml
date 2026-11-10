@@ -186,7 +186,7 @@ runs:
         CATALOG_SCRIPTS: ${{ github.action_path }}/../scripts/plugin-catalog
       run: |
         python=$(bash "$CATALOG_SCRIPTS/install-deps.sh")
-        "$python" "$CATALOG_SCRIPTS/catalog.py" --catalog index-repo index --keep-header
+        "$python" "$CATALOG_SCRIPTS/catalog.py" --catalog index-repo index --keep-header --if-exists
 
     - name: Find an open plugin update pull request
       id: pr-branch

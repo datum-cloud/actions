@@ -143,6 +143,33 @@ class KeepHeaderTest(unittest.TestCase):
         self.assertEqual(rebuilt["items"][0]["spec"]["version"], "v2.0.0")
 
 
+class IfExistsTest(unittest.TestCase):
+    def test_a_catalog_without_an_index_is_left_alone(self):
+        with CatalogDir({"sample": VALID}) as root:
+            status, _ = quietly(catalog.main, ["--catalog", root, "index", "--keep-header", "--if-exists"])
+            written = os.path.exists(os.path.join(root, "index.yaml"))
+            cwd = os.getcwd()
+            os.chdir(root)
+            try:
+                extra = scan_releases.rebuild_index()
+            finally:
+                os.chdir(cwd)
+            still_absent = not os.path.exists(os.path.join(root, "index.yaml"))
+        self.assertEqual(status, 0)
+        self.assertFalse(written)
+        self.assertEqual(extra, [])
+        self.assertTrue(still_absent)
+
+    def test_a_catalog_with_an_index_is_rebuilt(self):
+        with CatalogDir({"sample": VALID}) as root:
+            with open(os.path.join(root, "index.yaml"), "w") as handle:
+                handle.write("stale\n")
+            quietly(catalog.main, ["--catalog", root, "index", "--keep-header", "--if-exists"])
+            with open(os.path.join(root, "index.yaml")) as handle:
+                rebuilt = yaml.safe_load(handle)
+        self.assertEqual(rebuilt["items"][0]["metadata"]["name"], "sample")
+
+
 class PluginPullTest(unittest.TestCase):
     def reuse(self, files):
         pulls = [{"number": 7, "branch": "update-plugin/sample", "sha": "x"}]

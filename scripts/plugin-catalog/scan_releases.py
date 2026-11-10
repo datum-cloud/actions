@@ -170,10 +170,17 @@ def plugin_pr(catalog, pulls, name, path):
 
 
 def rebuild_index():
-    """Rebuild index.yaml from plugins/, keeping its header, so the update PR publishes the release."""
+    """Rebuild index.yaml from plugins/, keeping its header, so the update PR publishes the release.
+
+    Returns the paths to commit beside the manifest: index.yaml, or nothing when the catalog has
+    none, so a catalog that builds its index some other way is left alone.
+    """
+    if not os.path.exists(INDEX_PATH):
+        return []
     text, _ = catalog.render_index(".", catalog.existing_header("."))
     with open(INDEX_PATH, "w") as handle:
         handle.write(text)
+    return [INDEX_PATH]
 
 
 def proposed_version(catalog, pr, path):
@@ -205,7 +212,7 @@ def plan(pr, why, name):
     return f"update #{pr['number']}" if pr else f"open a PR on update-plugin/{name}"
 
 
-def publish(path, name, newest, pr, body, base_ref):
+def publish(path, name, newest, pr, body, base_ref, extra=()):
     """Commit the manifest and the rebuilt index to the plugin's PR branch, then open or retitle the PR.
 
     The commit goes through the API so GitHub signs it. A reused branch is reset to the checked-out
@@ -216,9 +223,9 @@ def publish(path, name, newest, pr, body, base_ref):
     base = run("git", "rev-parse", "HEAD").stdout.strip()
     env = {k: v for k, v in os.environ.items() if k != "EXPECTED_HEAD"}
     env.update(BASE_SHA=base, GITHUB_REPOSITORY=catalog_repo())
-    commit = subprocess.run([SIGN_COMMIT, branch, f"chore: {title}", path, INDEX_PATH],
+    commit = subprocess.run([SIGN_COMMIT, branch, f"chore: {title}", path, *extra],
                             capture_output=True, text=True, env=env)
-    run("git", "checkout", "--", path, INDEX_PATH)
+    run("git", "checkout", "--", path, *extra)
     if commit.returncode != 0:
         return f"signed commit failed: {commit.stderr.strip()}"
     if pr:
@@ -291,9 +298,9 @@ def main():
 
         with open(path, "w") as handle:
             handle.write(rewritten)
-        rebuild_index()
+        extra = rebuild_index()
 
-        failure = publish(path, name, newest, pr, pr_body(name, repo, current, newest), base)
+        failure = publish(path, name, newest, pr, pr_body(name, repo, current, newest), base, extra)
         if failure:
             skipped.append(f"{name}: {failure}")
             continue
