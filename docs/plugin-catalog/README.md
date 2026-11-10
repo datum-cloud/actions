@@ -12,7 +12,9 @@ same way:
   each `sha256`.
 - **`plugin-catalog-index.yaml`**, on pushes to the default branch that change
   `plugins/`: rebuilds `index.yaml` and opens a pull request with it, set to
-  merge once required checks pass.
+  merge once required checks pass. Update pull requests from the release action
+  and the scan already carry the rebuilt index, so for them this finds nothing
+  to change; it catches manifest changes made by hand.
 - **`plugin-catalog-scan.yaml`**, daily: opens or refreshes an update pull
   request for each plugin whose upstream repository published a newer release.
 - **`plugin-catalog-health.yaml`**, weekly: re-checks every manifest and archive
@@ -21,7 +23,8 @@ same way:
 A plugin's own release updates its catalog entry through the
 [`update-plugin-index`](../update-plugin-index/README.md) action. The scan is
 the backstop for when that update fails, and it reuses the pull request the
-action opened, so each plugin has one open update.
+action opened, so each plugin has one open update. Both rebuild `index.yaml` in
+that pull request, so one approval publishes a release.
 
 ## Set up a catalog
 

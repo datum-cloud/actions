@@ -8,6 +8,8 @@ plugin_file=$PLUGIN_FILE
 while [[ $plugin_file == ./* ]]; do
   plugin_file=${plugin_file#./}
 done
+# An update pull request may also carry the catalog's rebuilt index.
+index_file=${INDEX_FILE:-index.yaml}
 
 # Read every page and base so a head shared with another base is never changed.
 # Only branches in the catalog itself can be updated by the catalog token.
@@ -40,7 +42,8 @@ while IFS=$'\t' read -r number branch; do
     "repos/$INDEX_REPO/pulls/$number/files" -f per_page=100 |
     jq -c '(add // []) | map(.filename)')
   # Exact paths distinguish similarly named plugins and preserve other edits.
-  if jq -e --arg file "$plugin_file" '. == [$file]' <<< "$files" >/dev/null; then
+  if jq -e --arg file "$plugin_file" --arg index "$index_file" \
+    'sort == [$file] or sort == ([$file, $index] | sort)' <<< "$files" >/dev/null; then
     selected_branch=$branch
     break
   fi

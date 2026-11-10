@@ -113,7 +113,7 @@ Opens a PR against a datumctl plugin catalog (index repo) that bumps a plugin's 
 - `base-branch` (optional): Index repo branch to base the PR on (default `main`)
 - `token` (required): PAT / GitHub App token with `contents:write` + `pull-requests:write` on `index-repo`, minted in the same job. The built-in `GITHUB_TOKEN` cannot push or open a PR cross-repo.
 
-The archive→checksum mapping is driven off the basenames of the manifest's existing `platforms[].uri` values, so it works for any plugin. Regenerating `index.yaml` is left to the index repo's own generator. See [`docs/update-plugin-index/`](docs/update-plugin-index/README.md).
+The archive→checksum mapping is driven off the basenames of the manifest's existing `platforms[].uri` values, so it works for any plugin. The PR also carries the catalog's `index.yaml`, rebuilt with `scripts/plugin-catalog/catalog.py index --keep-header`, so one approval publishes a release; `rebuild-index: false` turns that off. `resolve-pr-branch.sh` reuses a PR whose files are the manifest alone or the manifest plus `index.yaml` (`INDEX_FILE`). See [`docs/update-plugin-index/`](docs/update-plugin-index/README.md).
 
 ### 7. Update NOTICE (`.github/workflows/update-notice.yaml`)
 
