@@ -77,9 +77,8 @@ it, the action fails loudly.
 The pull request also carries the catalog's `index.yaml`, rebuilt from
 `plugins/*.yaml` with the plugin catalog scripts, keeping the existing header.
 One approval then publishes the release to `datumctl` users. A catalog with no
-`index.yaml` is left alone. Each plugin is its
-own block in the index, so several update pull requests open at once still
-merge cleanly.
+`index.yaml` is left alone. Each plugin is its own block in the index, so
+several update pull requests open at once still merge cleanly.
 
 - **rebuild-index** (optional, default `true`): Set to `false` to leave
   `index.yaml` to the catalog's own rebuild workflow.
