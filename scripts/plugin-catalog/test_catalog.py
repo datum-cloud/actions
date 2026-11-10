@@ -108,6 +108,87 @@ class IndexTest(unittest.TestCase):
         self.assertEqual(quietly(catalog.main, args)[0], 0)
 
 
+class KeepHeaderTest(unittest.TestCase):
+    def test_keep_header_preserves_the_existing_header(self):
+        with CatalogDir({"sample": VALID}) as root:
+            quietly(catalog.main, ["--catalog", root, "index", "--name", "acme", "--owner", "acme-corp"])
+            quietly(catalog.main, ["--catalog", root, "index", "--keep-header"])
+            with open(os.path.join(root, "index.yaml")) as handle:
+                kept = yaml.safe_load(handle)
+            quietly(catalog.main, ["--catalog", root, "index", "--keep-header", "--owner", "other"])
+            with open(os.path.join(root, "index.yaml")) as handle:
+                overridden = yaml.safe_load(handle)
+            quietly(catalog.main, ["--catalog", root, "index"])
+            with open(os.path.join(root, "index.yaml")) as handle:
+                dropped = yaml.safe_load(handle)
+        self.assertEqual((kept["name"], kept["owner"]), ("acme", "acme-corp"))
+        self.assertEqual((overridden["name"], overridden["owner"]), ("acme", "other"))
+        self.assertNotIn("name", dropped)
+
+    def test_scan_rebuild_keeps_the_header(self):
+        with CatalogDir({"sample": VALID}) as root:
+            quietly(catalog.main, ["--catalog", root, "index", "--name", "acme"])
+            changed = variant(lambda m: m["spec"].update(version="v2.0.0"))
+            with open(os.path.join(root, "plugins", "sample.yaml"), "w") as handle:
+                yaml.safe_dump(changed, handle, sort_keys=False)
+            cwd = os.getcwd()
+            os.chdir(root)
+            try:
+                scan_releases.rebuild_index()
+            finally:
+                os.chdir(cwd)
+            with open(os.path.join(root, "index.yaml")) as handle:
+                rebuilt = yaml.safe_load(handle)
+        self.assertEqual(rebuilt["name"], "acme")
+        self.assertEqual(rebuilt["items"][0]["spec"]["version"], "v2.0.0")
+
+
+class IfExistsTest(unittest.TestCase):
+    def test_a_catalog_without_an_index_is_left_alone(self):
+        with CatalogDir({"sample": VALID}) as root:
+            status, _ = quietly(catalog.main, ["--catalog", root, "index", "--keep-header", "--if-exists"])
+            written = os.path.exists(os.path.join(root, "index.yaml"))
+            cwd = os.getcwd()
+            os.chdir(root)
+            try:
+                extra = scan_releases.rebuild_index()
+            finally:
+                os.chdir(cwd)
+            still_absent = not os.path.exists(os.path.join(root, "index.yaml"))
+        self.assertEqual(status, 0)
+        self.assertFalse(written)
+        self.assertEqual(extra, [])
+        self.assertTrue(still_absent)
+
+    def test_a_catalog_with_an_index_is_rebuilt(self):
+        with CatalogDir({"sample": VALID}) as root:
+            with open(os.path.join(root, "index.yaml"), "w") as handle:
+                handle.write("stale\n")
+            quietly(catalog.main, ["--catalog", root, "index", "--keep-header", "--if-exists"])
+            with open(os.path.join(root, "index.yaml")) as handle:
+                rebuilt = yaml.safe_load(handle)
+        self.assertEqual(rebuilt["items"][0]["metadata"]["name"], "sample")
+
+
+class PluginPullTest(unittest.TestCase):
+    def reuse(self, files):
+        pulls = [{"number": 7, "branch": "update-plugin/sample", "sha": "x"}]
+        original = scan_releases.pr_files
+        scan_releases.pr_files = lambda catalog_repo, number: files
+        try:
+            return scan_releases.plugin_pr("acme/catalog", pulls, "sample", "plugins/sample.yaml")
+        finally:
+            scan_releases.pr_files = original
+
+    def test_reuses_a_pull_request_with_the_manifest_and_index(self):
+        self.assertIsNotNone(self.reuse(["index.yaml", "plugins/sample.yaml"]))
+        self.assertIsNotNone(self.reuse(["plugins/sample.yaml"]))
+
+    def test_leaves_a_pull_request_with_other_files_alone(self):
+        self.assertIsNone(self.reuse(["plugins/sample.yaml", "index.yaml", "README.md"]))
+        self.assertIsNone(self.reuse(["index.yaml"]))
+
+
 class ValidateTest(unittest.TestCase):
     def validate(self, manifests, *extra):
         with CatalogDir(manifests) as root:

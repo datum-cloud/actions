@@ -5,7 +5,7 @@ A catalog repository keeps one manifest per plugin in plugins/*.yaml and
 publishes index.yaml, the file datumctl reads, built from those manifests.
 
   catalog.py validate [--download all|none|FILE...] [--datumctl PATH]
-  catalog.py index [--check] [--name N --description D --owner O --homepage H]
+  catalog.py index [--check] [--keep-header] [--if-exists] [--name N --description D --owner O --homepage H]
 
 validate checks every manifest against the schema, then downloads the archives
 of the manifests named by --download (all of them by default) and compares
@@ -14,7 +14,10 @@ each sha256. With --datumctl it also builds the index in memory and runs
 own rules as well as the schema's.
 
 index writes index.yaml, or with --check fails when the committed one differs
-from what the manifests produce.
+from what the manifests produce. With --keep-header, header fields not given on
+the command line are kept from the existing index.yaml, so a tool that edits one
+manifest can rebuild the index without knowing the catalog's header. With
+--if-exists, a catalog that has no index.yaml is left alone.
 
 Both read the catalog from --catalog (default: the current directory).
 """
@@ -184,10 +187,28 @@ def validate(args):
     return 1 if failed else 0
 
 
+def existing_header(catalog):
+    """Header fields of the catalog's current index.yaml, empty when it has none."""
+    path = os.path.join(catalog, "index.yaml")
+    if not os.path.exists(path):
+        return {}
+    with open(path) as handle:
+        current = yaml.safe_load(handle)
+    if not isinstance(current, dict):
+        return {}
+    return {key: current[key] for key in HEADER_FIELDS if current.get(key)}
+
+
 def index(args):
-    header = {key: getattr(args, key) for key in HEADER_FIELDS}
-    expected, count = render_index(args.catalog, header)
     target = os.path.join(args.catalog, "index.yaml")
+    if args.if_exists and not os.path.exists(target):
+        print("No index.yaml in this catalog, so none was written.")
+        return 0
+    header = {key: getattr(args, key) for key in HEADER_FIELDS}
+    if args.keep_header:
+        kept = existing_header(args.catalog)
+        header = {key: header[key] or kept.get(key, "") for key in HEADER_FIELDS}
+    expected, count = render_index(args.catalog, header)
     if not args.check:
         with open(target, "w") as handle:
             handle.write(expected)
@@ -223,6 +244,10 @@ def main(argv=None):
 
     build = commands.add_parser("index", help="write index.yaml, or check it with --check")
     build.add_argument("--check", action="store_true", help="fail when index.yaml is out of date")
+    build.add_argument("--keep-header", action="store_true",
+                       help="keep header fields not given here from the existing index.yaml")
+    build.add_argument("--if-exists", action="store_true",
+                       help="do nothing when the catalog has no index.yaml")
     for key in HEADER_FIELDS:
         build.add_argument(f"--{key}", default="", help=f"catalog {key} shown by datumctl (optional)")
     build.set_defaults(run=index)
