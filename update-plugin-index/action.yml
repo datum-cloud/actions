@@ -17,9 +17,11 @@ description: >-
 # whose release ships a checksums.txt (one `<sha256>  <filename>` per line)
 # alongside per-platform archives. Nothing about a specific plugin is hardcoded.
 #
-# Regenerating index.yaml is intentionally left to the index repo's own
-# generator, which reconciles index.yaml from plugins/*.yaml on merge. This only
-# edits plugins/<plugin>.yaml.
+# The pull request also carries index.yaml, rebuilt from plugins/*.yaml with
+# scripts/plugin-catalog/catalog.py, so one merge publishes the release. Each
+# plugin is its own block in the index, so concurrent update pull requests
+# still merge cleanly. Set rebuild-index to false to leave index.yaml to the
+# catalog's own rebuild.
 
 inputs:
   index-repo:
@@ -43,6 +45,10 @@ inputs:
     required: false
     default: "main"
     description: "Branch in the index repo to base the PR on. Defaults to `main`."
+  rebuild-index:
+    required: false
+    default: "true"
+    description: "Rebuild the catalog's `index.yaml` in the same PR, keeping its header. Defaults to `true`."
   token:
     required: true
     description: >-
@@ -173,6 +179,15 @@ runs:
         echo "=== Resulting manifest ==="
         cat "index-repo/${PLUGIN_FILE}"
 
+    - name: Rebuild the catalog index
+      if: inputs.rebuild-index == 'true'
+      shell: bash
+      env:
+        CATALOG_SCRIPTS: ${{ github.action_path }}/../scripts/plugin-catalog
+      run: |
+        python=$(bash "$CATALOG_SCRIPTS/install-deps.sh")
+        "$python" "$CATALOG_SCRIPTS/catalog.py" --catalog index-repo index --keep-header --if-exists
+
     - name: Find an open plugin update pull request
       id: pr-branch
       shell: bash
@@ -200,6 +215,6 @@ runs:
 
           Every platform's download URL now points at the `${{ inputs.version }}` release assets, and each `sha256` was refreshed from that release's `checksums.txt`. Catalog CI will validate the schema, resolve each URL, and verify each checksum.
 
-          The catalog `index.yaml` is regenerated automatically from `plugins/*.yaml` when this merges.
+          This also rebuilds the catalog's `index.yaml`, so merging it publishes the release to datumctl users.
 
           **What's in this release:** https://github.com/${{ steps.cfg.outputs.release-repo }}/releases/tag/${{ inputs.version }}

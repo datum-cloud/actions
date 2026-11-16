@@ -67,6 +67,7 @@ begin_case() {
   case_count=$((case_count + 1))
   export GH_FIXTURES="$test_root/case-$case_count"
   export PLUGIN_FILE=plugins/dns.yaml BASE_BRANCH=main
+  unset INDEX_FILE
   export GITHUB_OUTPUT="$GH_FIXTURES/output"
   mkdir "$GH_FIXTURES"
   printf 'existing=value\n' > "$GITHUB_OUTPUT"
@@ -145,6 +146,27 @@ pulls "$(pull 10 update-plugin/dns-v0.1.0)"
 files 10 plugins/dns.yaml README.md
 expect_branch update-plugin/dns
 
+begin_case 'PR carrying the manifest and the rebuilt index is reused'
+pulls "$(pull 10 update-plugin/dns)"
+files 10 index.yaml plugins/dns.yaml
+expect_branch update-plugin/dns
+
+begin_case 'PR carrying the index and another file is not overwritten'
+pulls "$(pull 10 update-plugin/dns-v0.1.0)"
+files 10 plugins/dns.yaml index.yaml README.md
+expect_branch update-plugin/dns
+
+begin_case 'PR changing only the index is not treated as a plugin update'
+pulls "$(pull 10 update-plugin/dns-v0.1.0)"
+files 10 index.yaml
+expect_branch update-plugin/dns
+
+begin_case 'custom index path is honored'
+export INDEX_FILE=catalog/index.yaml
+pulls "$(pull 10 update-plugin/dns)"
+files 10 plugins/dns.yaml catalog/index.yaml
+expect_branch update-plugin/dns
+
 begin_case 'custom manifest path identifies the correct PR'
 PLUGIN_FILE=catalog/network/dns.yaml
 pulls "$(pull 10 update-plugin/dns-v0.1.0)" "$(pull 20 update-plugin/dns-v0.2.0)"
@@ -196,7 +218,7 @@ for branch in update-plugin/dns update-plugin/dns-v0.1.0; do
   expect_branch update-plugin/dns-v0.2.0
 done
 
-for paths in 'plugins/compute.yaml' 'plugins/dns.yaml README.md' ''; do
+for paths in 'plugins/compute.yaml' 'plugins/dns.yaml README.md' 'index.yaml' ''; do
   begin_case "stable branch with unrelated files [$paths] is protected"
   pulls "$(pull 10 update-plugin/dns)"
   # The fixture intentionally separates the two literal test filenames.

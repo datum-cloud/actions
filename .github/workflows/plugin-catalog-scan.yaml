@@ -70,6 +70,7 @@ jobs:
           path: .plugin-catalog-action
           sparse-checkout: |
             /scripts/plugin-catalog/scan_releases.py
+            /scripts/plugin-catalog/catalog.py
             /scripts/plugin-catalog/install-deps.sh
             /scripts/plugin-catalog/requirements.txt
             /scripts/sign-commit/sign-commit

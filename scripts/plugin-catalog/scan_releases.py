@@ -29,7 +29,11 @@ import urllib.request
 
 import yaml
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import catalog  # noqa: E402
+
 PLUGINS_DIR = "plugins"
+INDEX_PATH = "index.yaml"
 SIGN_COMMIT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sign-commit", "sign-commit")
 RELEASE_URI = re.compile(r"https://github\.com/([^/]+/[^/]+)/releases/download/")
 
@@ -108,7 +112,8 @@ def pr_body(name, repo, current, newest):
         "happened, so the catalog cannot drift unnoticed.\n\n"
         "Checksums come from the release's `checksums.txt` where it has one, and "
         "are computed from the archives where it does not. PR validation "
-        "downloads every URI and verifies them again."
+        "downloads every URI and verifies them again. This also rebuilds "
+        "`index.yaml`, so merging it publishes the release."
     )
 
 
@@ -154,12 +159,28 @@ def plugin_pr(catalog, pulls, name, path):
 
     The update-plugin-index action in this repository (resolve-pr-branch.sh) reuses the PR on
     update-plugin/<name>, else the oldest on update-plugin/<name>-*, when the plugin's manifest
-    is its only file. Choosing the same PR keeps one open update per plugin, whoever opened it.
+    is its only file, or its only file besides the rebuilt index. Choosing the same PR keeps one
+    open update per plugin, whoever opened it.
     """
     for pr in candidates(pulls, f"update-plugin/{name}"):
-        if pr_files(catalog, pr["number"]) == [path]:
+        files = sorted(pr_files(catalog, pr["number"]))
+        if files in ([path], sorted([path, INDEX_PATH])):
             return pr
     return None
+
+
+def rebuild_index():
+    """Rebuild index.yaml from plugins/, keeping its header, so the update PR publishes the release.
+
+    Returns the paths to commit beside the manifest: index.yaml, or nothing when the catalog has
+    none, so a catalog that builds its index some other way is left alone.
+    """
+    if not os.path.exists(INDEX_PATH):
+        return []
+    text, _ = catalog.render_index(".", catalog.existing_header("."))
+    with open(INDEX_PATH, "w") as handle:
+        handle.write(text)
+    return [INDEX_PATH]
 
 
 def proposed_version(catalog, pr, path):
@@ -191,8 +212,8 @@ def plan(pr, why, name):
     return f"update #{pr['number']}" if pr else f"open a PR on update-plugin/{name}"
 
 
-def publish(path, name, newest, pr, body, base_ref):
-    """Commit the manifest to the plugin's PR branch, then open or retitle the PR.
+def publish(path, name, newest, pr, body, base_ref, extra=()):
+    """Commit the manifest and the rebuilt index to the plugin's PR branch, then open or retitle the PR.
 
     The commit goes through the API so GitHub signs it. A reused branch is reset to the checked-out
     commit first, as the release action rewrites it. Returns why it failed, or None.
@@ -202,9 +223,9 @@ def publish(path, name, newest, pr, body, base_ref):
     base = run("git", "rev-parse", "HEAD").stdout.strip()
     env = {k: v for k, v in os.environ.items() if k != "EXPECTED_HEAD"}
     env.update(BASE_SHA=base, GITHUB_REPOSITORY=catalog_repo())
-    commit = subprocess.run([SIGN_COMMIT, branch, f"chore: {title}", path],
+    commit = subprocess.run([SIGN_COMMIT, branch, f"chore: {title}", path, *extra],
                             capture_output=True, text=True, env=env)
-    run("git", "checkout", "--", path)
+    run("git", "checkout", "--", path, *extra)
     if commit.returncode != 0:
         return f"signed commit failed: {commit.stderr.strip()}"
     if pr:
@@ -277,8 +298,9 @@ def main():
 
         with open(path, "w") as handle:
             handle.write(rewritten)
+        extra = rebuild_index()
 
-        failure = publish(path, name, newest, pr, pr_body(name, repo, current, newest), base)
+        failure = publish(path, name, newest, pr, pr_body(name, repo, current, newest), base, extra)
         if failure:
             skipped.append(f"{name}: {failure}")
             continue
