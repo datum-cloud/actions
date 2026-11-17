@@ -1,0 +1,6 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  bad@file:../outside:
+    resolution: {directory: ../outside, type: directory}

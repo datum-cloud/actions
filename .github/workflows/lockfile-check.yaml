@@ -1,0 +1,64 @@
+name: Lockfile Check
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Directory to check, relative to the repository root
+        type: string
+        default: "."
+      exclude-paths:
+        description: Comma- or newline-separated globs, relative to `path`, of lockfiles not to check
+        type: string
+        default: ""
+      allowed-registries:
+        description: Comma- or newline-separated https:// registry URLs to accept besides registry.npmjs.org and registry.yarnpkg.com
+        type: string
+        default: ""
+      require-lockfile:
+        description: Fail when no lockfile is found
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check lockfile sources
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      SCAN_PATH: ${{ inputs.path }}
+      EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
+      ALLOWED_REGISTRIES: ${{ inputs.allowed-registries }}
+      REQUIRE_LOCKFILE: ${{ inputs.require-lockfile }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Checkout check scripts
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .lockfile-check-action
+          sparse-checkout: |
+            /scripts/lockfile-check/*.sh
+            /scripts/lockfile-check/*.awk
+            /scripts/lockfile-check/*.jq
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Move check scripts out of the workspace
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: bash "$GITHUB_WORKSPACE/.lockfile-check-action/scripts/lockfile-check/prepare.sh"
+
+      - name: Check lockfiles
+        run: bash "$SCRIPTS/check.sh"

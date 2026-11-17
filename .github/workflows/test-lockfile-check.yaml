@@ -1,0 +1,46 @@
+name: Test lockfile check
+
+on:
+  pull_request:
+    paths:
+      - "scripts/lockfile-check/**"
+      - ".github/workflows/lockfile-check.yaml"
+      - ".github/workflows/test-lockfile-check.yaml"
+  push:
+    paths:
+      - "scripts/lockfile-check/**"
+      - ".github/workflows/lockfile-check.yaml"
+      - ".github/workflows/test-lockfile-check.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)) }}
+
+jobs:
+  test:
+    name: Test lockfile outcomes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Lint scripts
+        run: shellcheck scripts/lockfile-check/*.sh
+      - name: Install both awks
+        run: sudo apt-get install -y --no-install-recommends mawk original-awk
+      - name: Run fixture and tamper tests
+        env:
+          REQUIRE_AWKS: mawk original-awk
+          TEST_AWKS: mawk original-awk
+        run: bash scripts/lockfile-check/test-lockfile-check.sh
+
+  workflow:
+    name: Run reusable workflow
+    uses: ./.github/workflows/lockfile-check.yaml
+    with:
+      path: scripts/lockfile-check/testdata/workflow
+      require-lockfile: true

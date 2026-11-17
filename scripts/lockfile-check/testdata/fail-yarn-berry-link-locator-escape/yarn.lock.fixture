@@ -1,0 +1,21 @@
+__metadata:
+  version: 8
+  cacheKey: 10c0
+
+"app@workspace:packages/app":
+  version: 0.0.0-use.local
+  resolution: "app@workspace:packages/app"
+  languageName: unknown
+  linkType: soft
+
+"shared@workspace:packages/shared":
+  version: 0.0.0-use.local
+  resolution: "shared@workspace:packages/shared"
+  languageName: unknown
+  linkType: soft
+
+"bad@link:../x::locator=app%40workspace%3A..%2F..":
+  version: 0.0.0-use.local
+  resolution: "bad@link:../x::locator=app%40workspace%3A..%2F.."
+  languageName: node
+  linkType: soft

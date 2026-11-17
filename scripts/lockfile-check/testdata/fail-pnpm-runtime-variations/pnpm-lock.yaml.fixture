@@ -1,0 +1,6 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  node@runtime:22.0.0:
+    resolution: {type: variations}

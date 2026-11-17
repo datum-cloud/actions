@@ -1,0 +1,7 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  bad@https://github.com/x/bad/tar.gz/abc:
+    resolution: {commit: abc, repo: 'https://github.com/x/bad.git', type: git}
+    version: 1.0.0

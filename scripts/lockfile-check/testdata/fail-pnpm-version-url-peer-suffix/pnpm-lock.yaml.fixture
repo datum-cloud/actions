@@ -1,0 +1,9 @@
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    dependencies:
+      bad:
+        specifier: github:x/bad
+        version: https://codeload.github.com/x/bad/tar.gz/abc(react@19.0.0)

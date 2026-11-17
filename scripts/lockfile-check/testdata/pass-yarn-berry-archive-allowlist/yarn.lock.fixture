@@ -1,0 +1,9 @@
+__metadata:
+  version: 8
+  cacheKey: 10c0
+
+"pg@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "pg@npm:1.0.0::__archiveUrl=https%3A%2F%2Fnpm.pkg.github.com%2Fdownload%2Fpg%2F1.0.0%2Fabc"
+  languageName: node
+  linkType: hard

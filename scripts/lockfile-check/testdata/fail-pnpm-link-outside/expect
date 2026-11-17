@@ -1,0 +1,3 @@
+out link:../outside (path outside the repository)
+deep link:packages/app/../../../deep (path outside the repository)
+abs link:/opt/abs (absolute path)

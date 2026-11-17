@@ -1,0 +1,21 @@
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    dependencies:
+      out:
+        specifier: link:../outside
+        version: link:../outside
+
+  packages/app:
+    dependencies:
+      deep:
+        specifier: link:../../../deep
+        version: link:../../../deep
+      fine:
+        specifier: link:../lib
+        version: link:../lib
+      abs:
+        specifier: link:/opt/abs
+        version: link:/opt/abs

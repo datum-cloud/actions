@@ -1,0 +1,12 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  left-pad@1.3.0:
+    resolution:
+      integrity: sha512-x
+      tarball: https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz
+
+snapshots:
+
+  left-pad@1.3.0: {}
