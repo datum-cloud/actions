@@ -1,0 +1,15 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  'a@1.0.0':
+    resolution: {"integrity": "sha512-x", "tarball": "https://registry.npmjs.org/a/-/a-1.0.0.tgz"}
+  b@1.0.0:
+    resolution:
+      tarball: >-
+        https://registry.npmjs.org/b/-/b-1.0.0.tgz
+  c@1.0.0:
+    resolution: {integrity: sha512-x,
+      tarball: https://registry.npmjs.org/c/-/c-1.0.0.tgz}
+  d@1.0.0:
+    resolution: {tarball : https://registry.npmjs.org/d/-/d-1.0.0.tgz}

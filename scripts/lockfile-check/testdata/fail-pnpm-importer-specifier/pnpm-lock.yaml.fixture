@@ -1,0 +1,14 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  good@1.0.0:
+    resolution: {integrity: sha512-x}
+
+importers:
+
+  .:
+    dependencies:
+      good:
+        specifier: github:x/good
+        version: 1.0.0

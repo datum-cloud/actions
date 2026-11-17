@@ -1,0 +1,2 @@
+NOTICE excluded vendor/thirdparty/package-lock.json
+::warning title=Lockfile check::1 lockfiles were excluded

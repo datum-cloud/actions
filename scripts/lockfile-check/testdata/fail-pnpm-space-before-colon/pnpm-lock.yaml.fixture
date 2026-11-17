@@ -1,0 +1,6 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  bad@1.0.0:
+    resolution: {tarball : https://evil.invalid/x.tgz}

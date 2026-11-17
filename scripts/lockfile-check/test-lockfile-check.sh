@@ -29,7 +29,7 @@ materialize() {
   local src=$1 dest=$2 file
   mkdir -p "$dest"
   cp -R "$src/." "$dest/"
-  rm -f "$dest/expect" "$dest/absent" "$dest/env" "$dest/git"
+  rm -f "$dest/expect" "$dest/absent" "$dest/env" "$dest/git" "$dest/delete"
   while IFS= read -r -d '' file; do
     mv "$file" "${file%.fixture}"
   done < <(find "$dest" -name '*.fixture' -print0)
@@ -51,8 +51,13 @@ run_case() {
     git -C "$dir" add -A
     git -C "$dir" -c user.name=test -c user.email=test@example.com -c commit.gpgsign=false commit -q -m fixture
   fi
+  if [[ -f $src/delete ]]; then
+    while IFS= read -r line; do
+      [[ -z $line ]] || rm -f "${dir:?}/$line"
+    done < "$src/delete"
+  fi
   out=$(
-    unset ALLOWED_REGISTRIES EXCLUDE_PATHS REQUIRE_LOCKFILE
+    unset ALLOWED_REGISTRIES EXCLUDE_PATHS REQUIRE_LOCKFILE ALLOW_UNCHECKED_YARN_ARTIFACTS YQ
     if [[ -f $src/env ]]; then
       while IFS= read -r line; do
         export "${line%%=*}=${line#*=}"
@@ -133,13 +138,41 @@ tamper evaluate.awk 'if (index(pth, "builtin<") == 1) continue' 'continue'
 tamper evaluate.awk 'if (kind == "http") return "insecure http source"' 'if (kind == "http") return "tarball outside approved registries"'
 tamper evaluate.awk 'if (!approved(e)) return "archive URL outside approved registries"' 'if (0) return ""'
 tamper evaluate.awk 'return substr(ws, at + 11)' 'return root'
-tamper pnpm.awk 'if (p > 0) v = substr(v, 1, p - 1)' 'if (p > 0) v = v'
-tamper pnpm.awk 'if (tarball != "") emit(name, tarball)' 'if (tarball != "") emit(name, "")'
-tamper pnpm.awk 'if (repo != "") emit(name, "git+" repo)' 'if (repo != "") emit(name, "")'
-tamper pnpm.awk 'return lead ":" importer "/" rest' 'return v'
+tamper pnpm.jq 'sub("\\(.*$"; "")' '.'
+tamper pnpm.jq 'if ($r | has("tarball")) then row($name; $r.tarball // "")' 'if ($r | has("tarball")) then row($name; "")'
+tamper pnpm.jq 'row($name; "git+" + ($r.repo | tostring))' 'row($name; "")'
+tamper pnpm.jq 'row($name; "resolution-type:" + ($type | tostring))' 'row($name; "")'
+tamper pnpm.jq 'else $m.lead + ":" + $importer + "/" + $m.rest' 'else .'
+tamper pnpm.jq 'test("^(@[^/]+/)?[^/@:]+@[^/:]+$")' 'test("^$")'
+tamper pnpm.jq 'row($name; $entry.specifier | depvalue($importer))' 'row($name; "")'
+tamper pnpm.jq 'startswith("catalog:")' 'startswith("zzz:")'
+tamper pnpm.jq 'else row($name; "resolution:missing") end)' 'else empty end)'
+tamper pnpm.jq 'row($name; "resolution:" + ($r | tostring))' 'row($name; "")'
+tamper pnpm.jq 'if $s == null then empty else row($name; $s) end' 'empty'
+tamper pnpm.jq '((.snapshots // {}) | snapshot_entries)' 'empty'
+tamper pnpm.jq '((.catalogs // {}) | to_entries[] | .value | select(type == "object") | dependency_map("."))' 'empty'
+tamper check.sh 'then error("duplicate mapping keys") else . end' 'then . else . end'
+tamper check.sh 'YAML_FLAGS=(--yaml-fix-merge-anchor-to-spec=true -o=json -I0)' 'YAML_FLAGS=(-o=json -I0)'
+tamper check.sh '[[ $out == *github.com/mikefarah/yq*version\ v4.* ]] ||' 'true ||'
+tamper check.sh 'out=$("$YQ" --version 2>&1) ||' 'out=$("$YQ" --version 2>&1 || true) ||'
+tamper check.sh 'echo "NOTICE excluded' ': "NOTICE excluded'
+tamper check.sh 'echo "::warning title=Lockfile check::$excluded' ': "::warning title=Lockfile check::$excluded'
+tamper check.sh 'if [[ ! -f $SCAN_PATH/$file ]]; then' 'if false; then'
+tamper check.sh '[[ $ALLOW_UNCHECKED_YARN_ARTIFACTS != true ]] || continue' 'continue'
+tamper check.sh '*/.yarn/cache/*.zip | */.pnp.cjs | */.pnp.loader.mjs) ;;' '*/.pnp.cjs | */.pnp.loader.mjs) ;;'
+tamper check.sh '*/.yarn/cache/*.zip | */.pnp.cjs | */.pnp.loader.mjs) ;;' '*/.yarn/cache/*.zip | */.pnp.loader.mjs) ;;'
+tamper check.sh 'if [[ $violations -gt 0 ]]; then
+    echo "::error title=Lockfile check::$violations tracked files' 'if false; then
+    echo "::error title=Lockfile check::$violations tracked files'
+tamper check.sh 'lockfile[ \t]+v1\r?$/' 'lockfile[ \t]+v1/'
+tamper yarn-berry.jq 'else error("entry without exactly one resolution")' 'else "x@npm:1"'
 tamper yarn-classic.awk 'emit(entry, strip(value))' 'emit(entry, "")'
-tamper yarn-classic.awk 'emit(substr(d, 1, at - 1), substr(d, at + 1))' 'emit(substr(d, 1, at - 1), "")'
-tamper yarn-berry.awk 'else printf "%s\t%s\n", substr(value, 1, i), substr(value, i + 2)' 'else printf "%s\t\n", substr(value, 1, i)'
+tamper yarn-classic.awk 'emit(substr(d, 1, at - 1), source)' 'emit(substr(d, 1, at - 1), "")'
+tamper yarn-berry.jq '| row($m.name; $m.source);' '| row($m.name; "");'
+tamper yarn-classic.awk 'emit(entry, "resolution:missing")' 'emit(entry, "")'
+tamper yarn-classic.awk 'if (resolved > 1) {' 'if (resolved > 99) {'
+tamper yarn-classic.awk 'line ~ /^[ \t]+"?resolved"?[ \t:]/ &&' 'line ~ /^[ \t]+zzzz/ &&'
+tamper yarn-classic.awk 'if (source !~ /^(link|file):/) local_only = 0' 'local_only = 1'
 tamper npm.jq 'else row($path; "file:" + $path)' 'else row($path; "")'
 tamper npm.jq 'row($name; $entry.version // "")' 'row($name; "")'
 tamper check.sh '[[ $entry == https://* &&' '[[ $entry == * &&'

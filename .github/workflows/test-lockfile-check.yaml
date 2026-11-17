@@ -31,7 +31,9 @@ jobs:
       - name: Lint scripts
         run: shellcheck scripts/lockfile-check/*.sh
       - name: Install both awks
-        run: sudo apt-get install -y --no-install-recommends mawk original-awk
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends original-awk
       - name: Run fixture and tamper tests
         env:
           REQUIRE_AWKS: mawk original-awk

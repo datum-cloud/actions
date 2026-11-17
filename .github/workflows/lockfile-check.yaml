@@ -19,6 +19,10 @@ on:
         description: Fail when no lockfile is found
         type: boolean
         default: false
+      allow-unchecked-yarn-artifacts:
+        description: Accept tracked Yarn offline cache zips and Plug'n'Play files, which this check can't read
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,11 +39,27 @@ jobs:
       EXCLUDE_PATHS: ${{ inputs.exclude-paths }}
       ALLOWED_REGISTRIES: ${{ inputs.allowed-registries }}
       REQUIRE_LOCKFILE: ${{ inputs.require-lockfile }}
+      ALLOW_UNCHECKED_YARN_ARTIFACTS: ${{ inputs.allow-unchecked-yarn-artifacts }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=Lockfile check::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+          if [[ -e $GITHUB_WORKSPACE/.lockfile-check-action ]]; then
+            echo "::error title=Lockfile check::.lockfile-check-action exists in the repository; it is the check's own checkout path"
+            exit 1
+          fi
+          echo "Lockfile check scripts: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
 
       - name: Checkout check scripts
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -56,7 +76,6 @@ jobs:
 
       - name: Move check scripts out of the workspace
         env:
-          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
           WORKFLOW_SHA: ${{ job.workflow_sha }}
         run: bash "$GITHUB_WORKSPACE/.lockfile-check-action/scripts/lockfile-check/prepare.sh"
 

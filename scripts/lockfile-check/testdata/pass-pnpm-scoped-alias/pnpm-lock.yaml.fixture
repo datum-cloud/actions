@@ -1,0 +1,17 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  '@scope/bar@1.0.0':
+    resolution: {integrity: sha512-x}
+
+  foo@1.0.0:
+    resolution: {integrity: sha512-y}
+
+snapshots:
+
+  foo@1.0.0:
+    dependencies:
+      bar: '@scope/bar@1.0.0'
+      baz: foo@1.0.0(peer@1.0.0)
+  '@scope/bar@1.0.0': {}

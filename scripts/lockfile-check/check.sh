@@ -7,8 +7,16 @@ SCAN_PATH=${SCAN_PATH:-.}
 EXCLUDE_PATHS=${EXCLUDE_PATHS:-}
 ALLOWED_REGISTRIES=${ALLOWED_REGISTRIES:-}
 REQUIRE_LOCKFILE=${REQUIRE_LOCKFILE:-false}
+ALLOW_UNCHECKED_YARN_ARTIFACTS=${ALLOW_UNCHECKED_YARN_ARTIFACTS:-false}
+YQ=${YQ:-yq}
+YAML_FLAGS=(--yaml-fix-merge-anchor-to-spec=true -o=json -I0)
+YAML_FILTER='(if ([.. | select(tag == "!!map") | select((keys | length) != (keys | unique | length))] | length) > 0 then error("duplicate mapping keys") else . end)'
 
 default_registries=(https://registry.npmjs.org/ https://registry.yarnpkg.com/)
+
+sanitize() {
+  tr -c ' -~\n' '?'
+}
 
 split_list() {
   printf '%s\n' "$1" | tr -s ',[:space:]' '\n' | sed '/^$/d'
@@ -35,6 +43,8 @@ excludes=()
 while IFS= read -r pattern; do
   excludes+=("${pattern%/}")
 done < <(split_list "$EXCLUDE_PATHS")
+
+excluded=0
 
 is_excluded() {
   local pattern
@@ -63,19 +73,62 @@ while IFS= read -r -d '' file; do
     *) continue ;;
   esac
   case /$file/ in */node_modules/*) continue ;; esac
-  is_excluded "$file" && continue
-  [[ -f $SCAN_PATH/$file ]] || continue
+  if is_excluded "$file"; then
+    echo "NOTICE excluded $(printf '%s' "$file" | sanitize)"
+    excluded=$((excluded + 1))
+    continue
+  fi
   lockfiles+=("$file")
+done < <(LC_ALL=C sort -z "$work/files")
+
+if [[ $excluded -gt 0 ]]; then
+  echo "::warning title=Lockfile check::$excluded lockfiles were excluded by exclude-paths and not checked"
+fi
+
+violations=0
+while IFS= read -r -d '' file; do
+  file=${file#./}
+  case /$file/ in */node_modules/*) continue ;; esac
+  case /$file in
+    */.yarn/cache/*.zip | */.pnp.cjs | */.pnp.loader.mjs) ;;
+    *) continue ;;
+  esac
+  [[ $ALLOW_UNCHECKED_YARN_ARTIFACTS != true ]] || continue
+  echo "FAIL $(printf '%s' "$file" | sanitize): tracked Yarn offline cache or Plug'n'Play file the check can't read (set allow-unchecked-yarn-artifacts to accept)"
+  violations=$((violations + 1))
 done < <(LC_ALL=C sort -z "$work/files")
 
 if [[ ${#lockfiles[@]} -eq 0 ]]; then
   if [[ $REQUIRE_LOCKFILE == true ]]; then
-    echo "::error title=Lockfile check::no lockfile found under '$SCAN_PATH' and require-lockfile is set"
+    echo "::error title=Lockfile check::no lockfile found under '$SCAN_PATH' to check ($excluded excluded) and require-lockfile is set"
     exit 2
   fi
-  echo "lockfile-check: no lockfile found under '$SCAN_PATH'; nothing to check"
+  if [[ $violations -gt 0 ]]; then
+    echo "::error title=Lockfile check::$violations tracked files hold packages the check can't read"
+    exit 1
+  fi
+  echo "lockfile-check: no lockfile found under '$SCAN_PATH' to check ($excluded excluded); nothing to check"
   exit 0
 fi
+
+need_yq() {
+  local out
+  out=$("$YQ" --version 2>&1) || fail_config "yq not found; mikefarah yq v4 is required to read pnpm and Yarn Berry lockfiles"
+  [[ $out == *github.com/mikefarah/yq*version\ v4.* ]] || fail_config "yq must be mikefarah yq v4, found: $(printf '%s' "$out" | sanitize | head -c 100)"
+  printf 'a: 1\n' | "$YQ" "${YAML_FLAGS[@]}" . > /dev/null 2>&1 || fail_config "this yq does not support --yaml-fix-merge-anchor-to-spec; use v4.47 or newer"
+}
+
+yaml_to_json() {
+  "$YQ" "${YAML_FLAGS[@]}" "$YAML_FILTER" "$SCAN_PATH/$1"
+}
+
+is_yarn_classic() {
+  "$AWK" '
+    /^#/ { if (tolower($0) ~ /^#[ \t]+yarn[ \t]+lockfile[ \t]+v1\r?$/) { found = 1; exit } next }
+    { exit }
+    END { exit !found }
+  ' "$SCAN_PATH/$1"
+}
 
 extract() {
   local file=$1 name=${1##*/}
@@ -85,26 +138,30 @@ extract() {
       jq -r -f "$script_dir/npm.jq" "$SCAN_PATH/$file"
       ;;
     pnpm-lock.yaml)
-      "$AWK" -f "$script_dir/pnpm.awk" "$SCAN_PATH/$file"
+      yaml_to_json "$file" | jq -r -f "$script_dir/pnpm.jq"
       ;;
     yarn.lock)
-      if grep -q '^__metadata:' "$SCAN_PATH/$file"; then
-        "$AWK" -f "$script_dir/yarn-berry.awk" "$SCAN_PATH/$file"
-      else
+      if is_yarn_classic "$file"; then
         "$AWK" -f "$script_dir/yarn-classic.awk" "$SCAN_PATH/$file"
+      else
+        yaml_to_json "$file" | jq -r -f "$script_dir/yarn-berry.jq"
       fi
       ;;
   esac
 }
 
-sanitize() {
-  tr -c ' -~\n' '?'
-}
-
 checked=0
 records=0
-violations=0
 errors=0
+command -v jq > /dev/null || fail_config "jq not found"
+for file in "${lockfiles[@]}"; do
+  case ${file##*/} in
+    pnpm-lock.yaml | yarn.lock)
+      need_yq
+      break
+      ;;
+  esac
+done
 for file in "${lockfiles[@]}"; do
   checked=$((checked + 1))
   shown=$(printf '%s' "$file" | sanitize)
@@ -115,6 +172,11 @@ for file in "${lockfiles[@]}"; do
       continue
       ;;
   esac
+  if [[ ! -f $SCAN_PATH/$file ]]; then
+    echo "ERROR $shown: listed by git but missing from the work tree"
+    errors=$((errors + 1))
+    continue
+  fi
   dir=${file%/*}
   [[ $dir != "$file" ]] || dir=.
   if ! extract "$file" > "$work/rows" 2> "$work/err"; then

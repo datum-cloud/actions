@@ -1,0 +1,10 @@
+__metadata:
+  version: 8
+  cacheKey: 10c0
+
+"good@npm:1.0.0":
+  version: 1.0.0
+  resolution: "good@npm:1.0.0"
+
+"hidden@npm:1.0.0":
+  version: 1.0.0

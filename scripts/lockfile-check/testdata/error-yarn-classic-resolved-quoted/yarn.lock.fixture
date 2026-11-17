@@ -1,0 +1,6 @@
+# yarn lockfile v1
+
+
+bad@^1.0.0:
+  version "1.0.0"
+  "resolved" "https://evil.invalid/bad.tgz"

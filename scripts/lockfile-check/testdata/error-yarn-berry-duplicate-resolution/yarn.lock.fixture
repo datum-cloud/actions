@@ -1,0 +1,7 @@
+__metadata:
+  version: 8
+  cacheKey: 10c0
+
+"bad@npm:1.0.0":
+  resolution: "bad@npm:1.0.0"
+  resolution: "bad@https://evil.invalid/bad.tgz"
