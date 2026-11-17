@@ -159,4 +159,26 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_NUMBER: ${{ steps.pr.outputs.pull-request-number }}
-        run: gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge
+        # A pull request's merge state is unsettled for a moment after it is
+        # created or its head moves. GitHub refuses to enable auto-merge while it
+        # is unsettled, with "Pull request is in unstable status", so the pull
+        # request would stay unmerged and this step would fail the run. Retry
+        # that one rejection; enabling auto-merge is a no-op once it is set, so
+        # repeating the call is safe. Any other error fails the run at once.
+        run: |
+          for attempt in $(seq 1 6); do
+            if output=$(gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --auto --merge 2>&1); then
+              echo "$output"
+              exit 0
+            fi
+            if [[ $output == *"unstable status"* ]]; then
+              echo "attempt $attempt: the merge state is not settled yet, retrying"
+              sleep 5
+            else
+              echo "$output"
+              exit 1
+            fi
+          done
+          echo "could not enable auto-merge after $attempt attempts"
+          echo "$output"
+          exit 1
