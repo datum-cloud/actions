@@ -1,0 +1,12 @@
+lockfileVersion: '9.0'
+
+catalogs:
+  default:
+    bad:
+      specifier: github:x/bad
+      version: 1.0.0
+
+packages:
+
+  bad@1.0.0:
+    resolution: {integrity: sha512-x}

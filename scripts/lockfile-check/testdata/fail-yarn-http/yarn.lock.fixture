@@ -1,0 +1,10 @@
+# yarn lockfile v1
+
+
+good@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/good/-/good-1.0.0.tgz#abc"
+
+bad@^1.0.0:
+  version "1.0.0"
+  resolved "http://registry.yarnpkg.com/bad/-/bad-1.0.0.tgz#abc"

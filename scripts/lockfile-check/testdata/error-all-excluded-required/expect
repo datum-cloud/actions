@@ -1,0 +1,4 @@
+NOTICE excluded package-lock.json
+::warning title=Lockfile check::1 lockfiles were excluded
+no lockfile found under
+(1 excluded)

@@ -1,0 +1,1 @@
+FAIL packages/web/yarn.lock: bad git+ssh://git@github.com/x/bad.git#abc (git source)

@@ -1,0 +1,10 @@
+# yarn lockfile v1
+
+
+good@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/good/-/good-1.0.0.tgz#abc"
+
+"bad@git+ssh://git@github.com/x/bad.git#abc":
+  version "1.0.0"
+  resolved "git+ssh://git@github.com/x/bad.git#abc"

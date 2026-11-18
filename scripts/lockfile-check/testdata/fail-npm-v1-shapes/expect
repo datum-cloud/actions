@@ -1,0 +1,5 @@
+shorthand github:x/shorthand#abc (git source)
+tarball https://evil.example/tarball-1.0.0.tgz (tarball outside approved registries)
+ssh git+ssh://git@github.com/x/ssh.git#abc (git source)
+local file:../../outside (path outside the repository)
+nested http://registry.npmjs.org/nested/-/nested-1.0.0.tgz (insecure http source)

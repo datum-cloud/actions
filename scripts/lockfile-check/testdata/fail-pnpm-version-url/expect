@@ -1,0 +1,2 @@
+bad https://codeload.github.com/x/bad/tar.gz/abc (tarball outside approved registries)
+worse git+ssh://git@github.com/x/worse.git#abc (git source)

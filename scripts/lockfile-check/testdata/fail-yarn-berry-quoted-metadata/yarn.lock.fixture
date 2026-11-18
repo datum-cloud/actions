@@ -1,0 +1,6 @@
+"__metadata":
+  version: 8
+
+"bad@npm:1.0.0":
+  version: 1.0.0
+  resolution: "bad@https://evil.invalid/bad.tgz"

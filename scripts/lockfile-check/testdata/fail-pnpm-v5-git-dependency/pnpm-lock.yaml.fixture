@@ -1,0 +1,15 @@
+lockfileVersion: 5.4
+
+specifiers:
+  bad: github:x/bad
+
+dependencies:
+  bad: github.com/x/bad/abc123
+
+packages:
+
+  github.com/x/bad/abc123:
+    resolution: {tarball: https://codeload.github.com/x/bad/tar.gz/abc123}
+    name: bad
+    version: 1.0.0
+    dev: false

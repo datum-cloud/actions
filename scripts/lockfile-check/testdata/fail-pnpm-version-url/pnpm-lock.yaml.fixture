@@ -1,0 +1,15 @@
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    dependencies:
+      good:
+        specifier: ^1.0.0
+        version: 1.0.0
+      bad:
+        specifier: github:x/bad
+        version: https://codeload.github.com/x/bad/tar.gz/abc
+      worse:
+        specifier: git+ssh://git@github.com/x/worse.git
+        version: git+ssh://git@github.com/x/worse.git#abc

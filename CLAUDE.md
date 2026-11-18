@@ -170,6 +170,19 @@ Runs a datumctl plugin catalog: a repo with `plugins/<name>.yaml` manifests and 
 
 Logic lives in `scripts/plugin-catalog/` (`catalog.py`, `scan_releases.py`, installers), sparse-checked-out at the workflow's own commit like vuln-scan; the scan also takes `scripts/sign-commit/sign-commit`. Python libraries are hash-pinned in `requirements.txt` (generated from `requirements.in`), and `install-datumctl.sh` pins the `datumctl` release and checks it against the release's checksums; Renovate bumps both. The schema may be stricter than `datumctl`, never looser: `test_catalog.py` fails when the schema accepts a manifest `datumctl` rejects. `test-plugin-catalog.yaml` runs the tests and calls the validate and health workflows on `scripts/plugin-catalog/testdata/catalog`. See [`docs/plugin-catalog/`](docs/plugin-catalog/README.md).
 
+### 12. Lockfile Check (`.github/workflows/lockfile-check.yaml`)
+
+Fails when an npm, pnpm, or Yarn lockfile resolves a package from anywhere other than an approved registry: `http:`, a tarball outside `registry.npmjs.org` and `registry.yarnpkg.com`, git sources, `github:` shorthand, `exec:`, or a `file:`/`link:`/`workspace:` path outside the repository. Callers run it on every pull request. Logic lives in `scripts/lockfile-check/` in Bash with `jq`, `yq` (mikefarah v4.47.1+, preinstalled on `ubuntu-latest`) and `awk`; pnpm and Yarn Berry lockfiles go through `yq` to JSON, never line regexes; the workflow sparse-checks-out only the `.sh`, `.awk`, and `.jq` files at its own commit through `job.workflow_repository` and `job.workflow_sha`, then moves them to `$RUNNER_TEMP`. A lockfile that can't be parsed or yields no records fails, as do unsupported `bun.lock` files.
+
+**Inputs:**
+- `path` (optional, default `.`): Directory to check
+- `exclude-paths` (optional, default empty): Globs, relative to `path`, of lockfiles not to check
+- `allowed-registries` (optional, default empty): `https://` registry URLs accepted besides the two defaults
+- `require-lockfile` (optional, default `false`): Fail when no lockfile is found; a lockfile skipped by `exclude-paths` counts as not found
+- `allow-unchecked-yarn-artifacts` (optional, default `false`): Accept tracked `.yarn/cache/*.zip` and `.pnp.cjs` files, which the check refuses by default
+
+Exit codes: 0 clean, 1 refused source, 2 unparsable or empty lockfile, bad settings, or a required lockfile missing. `scripts/lockfile-check/test-lockfile-check.sh`, run by `test-lockfile-check.yaml` under mawk and original-awk, runs the fixtures in `testdata/` and then weakens each rule in a copy of the scripts to prove the fixtures catch it. See [`docs/lockfile-check/`](docs/lockfile-check/README.md).
+
 ## Common Development Commands
 
 ### Linting Workflows

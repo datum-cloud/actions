@@ -1,0 +1,14 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  good@1.0.0:
+    resolution: {integrity: sha512-x}
+
+  'bad@https://codeload.github.com/x/bad/tar.gz/abc':
+    resolution: {tarball: https://codeload.github.com/x/bad/tar.gz/abc}
+    version: 1.0.0
+
+snapshots:
+
+  good@1.0.0: {}

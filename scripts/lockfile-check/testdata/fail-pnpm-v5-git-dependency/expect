@@ -1,0 +1,2 @@
+bad github.com/x/bad/abc123 (git shorthand or unrecognised source)
+github.com/x/bad/abc123 https://codeload.github.com/x/bad/tar.gz/abc123 (tarball outside approved registries)

@@ -1,0 +1,9 @@
+lockfileVersion: '9.0'
+
+packages:
+
+  bad@1.0.0:
+    resolution:
+      commit: abc
+      repo: https://github.com/x/bad.git
+      type: git
