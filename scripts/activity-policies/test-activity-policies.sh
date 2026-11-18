@@ -8,6 +8,11 @@
 # install-activitytool.sh pulls, so docker is required. The installer's own
 # cases and the Docker wrapper cases use a stand-in docker command instead.
 # SKIP_TAMPER=true skips the tamper tests.
+#
+# SC2016: tamper targets are literal script text, so they are single-quoted.
+# SC2030/SC2031: each case sets its environment inside a subshell on purpose,
+# so nothing leaks between cases.
+# shellcheck disable=SC2016,SC2030,SC2031
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
