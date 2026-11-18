@@ -1,0 +1,15 @@
+policy_files:
+  - group-policy.yaml
+
+tests:
+  - name: expected english summary intentionally differs from policy output
+    audit:
+      verb: create
+      user:
+        username: alice@example.com
+      objectRef:
+        apiGroup: iam.miloapis.com
+        resource: groups
+        name: platform-admins
+    exp_rule: create
+    exp_summary: "alice@example.com provisioned team platform-admins"

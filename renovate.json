@@ -8,7 +8,8 @@
     "**/node_modules/**",
     "scripts/vuln-scan/testdata/**",
     "scripts/code-scan/testdata/**",
-    "scripts/lockfile-check/testdata/**"
+    "scripts/lockfile-check/testdata/**",
+    "scripts/activity-policies/testdata/**"
   ],
   "customManagers": [
     {
@@ -29,6 +30,16 @@
       ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n[A-Z_]+_VERSION=(?<currentValue>\\S+)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "activitytool version pinned in the activity-policies installer",
+      "managerFilePatterns": [
+        "/^scripts/activity-policies/install-activitytool\\.sh$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\nPINNED_VERSION=(?<currentValue>\\S+)"
       ]
     }
   ],

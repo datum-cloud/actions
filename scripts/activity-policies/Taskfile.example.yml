@@ -1,0 +1,18 @@
+version: "3"
+
+vars:
+  # renovate: datasource=docker depName=ghcr.io/milo-os/activitytool
+  ACTIVITYTOOL_IMAGE: ghcr.io/milo-os/activitytool:v0.9.2
+
+tasks:
+  test-activity-policies:
+    desc: Validate ActivityPolicy manifests and run unit tests
+    cmds:
+      - |
+        if command -v activitytool >/dev/null 2>&1; then
+          exec activitytool test --policies config/services/activity/policies test/activity-policies
+        fi
+        docker run --rm \
+          -v "{{.ROOT_DIR}}:/work:ro" -w /work \
+          "{{.ACTIVITYTOOL_IMAGE}}" \
+          test --policies config/services/activity/policies test/activity-policies

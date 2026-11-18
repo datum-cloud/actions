@@ -1,0 +1,15 @@
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: invalid-group-policy
+spec:
+  resource:
+    apiGroup: iam.miloapis.com
+    kind: Group
+  auditRules:
+    - name: bad-rule
+      match: "event.reason == 'Ready'"
+      summary: "{{ actor }} created group"
+    - name: bad-rule
+      match: "audit.verb == 'delete'"
+      summary: "{{ actor }} deleted {{ unclosed"
