@@ -11,7 +11,7 @@ ALLOW_EMPTY=${ALLOW_EMPTY:-false}
 ACTIVITYTOOL=${ACTIVITYTOOL:-activitytool}
 
 fail_config() {
-  echo "::error title=Activity policy tests::$1"
+  echo "::error title=Activity policy tests::$1" >&2
   exit 2
 }
 
@@ -34,8 +34,10 @@ ACTIVITYTOOL=$resolved_tool
 
 cd "$SCAN_PATH"
 
+# Split a comma- or newline-separated list, trimming surrounding whitespace.
+# Spaces inside an entry are kept: "my policies" stays one path.
 split_list() {
-  printf '%s\n' "$1" | tr ', \t' '\n' | sed '/^$/d'
+  printf '%s\n' "$1" | tr ',' '\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d'
 }
 
 normalize_rel_path() {
@@ -70,10 +72,122 @@ is_test_filename() {
   return 1
 }
 
+is_kustomization_file() {
+  case $(basename "$1") in
+    kustomization.yaml | kustomization.yml) return 0 ;;
+  esac
+  return 1
+}
+
+# Print, one per line, the file paths a kustomization uses as patches:
+# `path:` entries under patches/patchesJson6902 and the plain entries of
+# patchesStrategicMerge. Inline patches are skipped; values that are not
+# files (a JSON patch's `path: /spec/...`) are filtered out by the caller.
+kustomization_patch_refs() {
+  awk '
+    function clean(v) {
+      sub(/[[:space:]]+#.*$/, "", v)
+      sub(/[[:space:]]+$/, "", v)
+      if (v ~ /^".*"$/ || v ~ /^\047.*\047$/) v = substr(v, 2, length(v) - 2)
+      return v
+    }
+    /^[^[:space:]#]/ {
+      section = ""
+      if ($0 ~ /^(patches|patchesJson6902):/) section = "path"
+      else if ($0 ~ /^patchesStrategicMerge:/) section = "list"
+      next
+    }
+    section == "path" && /^[[:space:]]*(-[[:space:]]+)?path:[[:space:]]*[^[:space:]]/ {
+      v = $0
+      sub(/^[[:space:]]*(-[[:space:]]+)?path:[[:space:]]*/, "", v)
+      print clean(v)
+    }
+    section == "list" && /^[[:space:]]*-[[:space:]]+[^|>[:space:]]/ {
+      v = $0
+      sub(/^[[:space:]]*-[[:space:]]+/, "", v)
+      print clean(v)
+    }
+  ' "$1"
+}
+
+# Join a relative reference onto a directory and fold "." and ".." segments.
+# Prints nothing when the result climbs above the scan root.
+join_rel_path() {
+  local part parts=() out=() IFS=/
+  read -r -a parts <<< "$1/$2"
+  for part in "${parts[@]}"; do
+    case $part in
+      "" | .) ;;
+      ..)
+        [[ ${#out[@]} -gt 0 ]] || return 0
+        unset 'out[${#out[@]}-1]'
+        ;;
+      *) out+=("$part") ;;
+    esac
+  done
+  [[ ${#out[@]} -gt 0 ]] || { echo .; return 0; }
+  printf '%s\n' "${out[*]}"
+}
+
+in_list() {
+  grep -qxF -- "$1" <<< "$2"
+}
+
+# Auto-discovery when no standard policies directory exists. Kustomizations
+# are preferred: a directory whose kustomization file sits next to an
+# ActivityPolicy manifest is passed as one Kustomize directory, which
+# activitytool renders. Files that any kustomization uses as a patch are
+# never passed on their own: a strategic-merge patch is `kind:
+# ActivityPolicy` with only part of a spec and fails validation by itself.
+# Remaining ActivityPolicy files, outside any kustomization, are passed
+# individually.
+discover_policies() {
+  local files rel dir ref joined kustomize_dirs="" patch_files="" selected_dirs=""
+  files=""
+  while IFS= read -r rel; do
+    [[ -n $rel && -f $rel ]] || continue
+    case /$rel/ in */node_modules/* | */vendor/* | */testdata/*) continue ;; esac
+    files+=$rel$'\n'
+  done < <(list_repo_yaml_files)
+
+  while IFS= read -r rel; do
+    [[ -n $rel ]] || continue
+    is_kustomization_file "$rel" || continue
+    dir=$(dirname "$rel")
+    kustomize_dirs+=$dir$'\n'
+    while IFS= read -r ref; do
+      [[ -n $ref && $ref != /* ]] || continue
+      joined=$(join_rel_path "$dir" "$ref")
+      [[ -n $joined && -f $joined ]] || continue
+      patch_files+=$joined$'\n'
+    done < <(kustomization_patch_refs "$rel")
+  done <<< "$files"
+
+  while IFS= read -r rel; do
+    [[ -n $rel ]] || continue
+    is_test_filename "$rel" && continue
+    is_kustomization_file "$rel" && continue
+    grep -qE '^[[:space:]]*kind:[[:space:]]*ActivityPolicy([[:space:]]|$)' "$rel" || continue
+    if in_list "$rel" "$patch_files"; then
+      echo "Skipping $rel: a kustomization uses it as a patch"
+      continue
+    fi
+    dir=$(dirname "$rel")
+    if in_list "$dir" "$kustomize_dirs"; then
+      if ! in_list "$dir" "$selected_dirs"; then
+        selected_dirs+=$dir$'\n'
+        policy_paths+=("$dir")
+      fi
+    else
+      policy_paths+=("$rel")
+    fi
+  done <<< "$files"
+}
+
 policy_paths=()
 if [[ -n $POLICIES_PATH ]]; then
   while IFS= read -r entry; do
-    rel=$(normalize_rel_path "$entry")
+    rel=$(normalize_rel_path "$entry") || exit 2
     [[ -e $rel ]] || fail_config "policies-path entry '$rel' does not exist under '$SCAN_PATH'"
     policy_paths+=("$rel")
   done < <(split_list "$POLICIES_PATH")
@@ -85,22 +199,14 @@ else
   done
 
   if [[ ${#policy_paths[@]} -eq 0 ]]; then
-    while IFS= read -r rel; do
-      [[ -n $rel ]] || continue
-      case /$rel/ in */node_modules/* | */vendor/* | */testdata/*) continue ;; esac
-      is_test_filename "$rel" && continue
-      [[ -f $rel ]] || continue
-      if grep -qE '^[[:space:]]*kind:[[:space:]]*ActivityPolicy([[:space:]]|$)' "$rel"; then
-        policy_paths+=("$rel")
-      fi
-    done < <(list_repo_yaml_files)
+    discover_policies
   fi
 fi
 
 test_paths=()
 if [[ -n $TESTS_PATH ]]; then
   while IFS= read -r entry; do
-    rel=$(normalize_rel_path "$entry")
+    rel=$(normalize_rel_path "$entry") || exit 2
     [[ -e $rel ]] || fail_config "tests-path entry '$rel' does not exist under '$SCAN_PATH'"
     test_paths+=("$rel")
   done < <(split_list "$TESTS_PATH")

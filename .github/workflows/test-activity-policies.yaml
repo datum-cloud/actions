@@ -1,9 +1,12 @@
 name: Activity Policy Tests
 
 # Validates ActivityPolicy manifests (including Kustomize directories) and
-# runs declarative unit tests (*.test.yaml) offline using activitytool.
+# runs declarative unit tests (*.test.yaml) offline in the
+# ghcr.io/milo-os/activitytool image, pulled by its pinned digest.
 # Logic lives in scripts/activity-policies/*.sh, checked out from this
 # repository at the same commit as this workflow.
+#
+# Callers must grant `contents: read`.
 #
 # Usage, inputs, and local runs:
 # https://github.com/datum-cloud/actions/blob/main/docs/activity-policies/README.md
@@ -32,7 +35,7 @@ on:
         type: boolean
         default: false
       activitytool-version:
-        description: Override the pinned activitytool version tag from milo-os/activity
+        description: ghcr.io/milo-os/activitytool tag, optionally pinned as vX.Y.Z@sha256:<digest>. Set it to the milo-os/activity release deployed where your policies run (default is the pin in install-activitytool.sh)
         type: string
         default: ""
 

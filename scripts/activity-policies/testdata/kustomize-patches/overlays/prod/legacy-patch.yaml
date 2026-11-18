@@ -1,0 +1,6 @@
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: iam.miloapis.com-group
+  annotations:
+    example.com/tier: gold

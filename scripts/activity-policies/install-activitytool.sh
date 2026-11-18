@@ -1,84 +1,119 @@
 #!/usr/bin/env bash
-# Provide activitytool on PATH by using a provided ACTIVITYTOOL binary, pulling
-# the pinned ghcr.io/milo-os/activitytool container image and creating a small
-# wrapper script, or falling back to `go install` when no image tag is pushed yet.
+# Put activitytool on PATH for check.sh.
+#
+# The supported path, in CI and on workstations, is the container image:
+# pull ghcr.io/milo-os/activitytool at ACTIVITYTOOL_VERSION (default:
+# PINNED_VERSION below) and write an `activitytool` wrapper that runs that
+# exact digest offline through docker-run.sh. Integrity rests on the digest
+# pin (vX.Y.Z@sha256:<digest>), which Renovate keeps current; a tag-only
+# version is accepted with a warning. Any failure stops here with the
+# underlying tool's own error; there is no other install route.
+#
+# With CACHE_DIR set, as run.sh does, the wrapper goes in its own
+# CACHE_DIR/activitytool-<version> directory and is reused while the image
+# digest it pins is still present locally.
 set -euo pipefail
 
+# Keep in sync with the Taskfile snippet in docs/activity-policies/README.md;
+# Renovate updates both together (see renovate.json).
 # renovate: datasource=docker depName=ghcr.io/milo-os/activitytool
-PINNED_VERSION=v0.9.2
+PINNED_VERSION=v0.10.0@sha256:8846d57a341837d888cc3de1d2cb396e42b8e0bcf0e2da5f501d8d5223fe0db1
+
 ACTIVITYTOOL_VERSION=${ACTIVITYTOOL_VERSION:-$PINNED_VERSION}
 ACTIVITYTOOL_IMAGE=${ACTIVITYTOOL_IMAGE:-ghcr.io/milo-os/activitytool}
 
-if [[ -n ${ACTIVITYTOOL:-} ]]; then
-  if resolved=$(command -v "$ACTIVITYTOOL" 2>/dev/null) && [[ -x $resolved ]]; then
-    dir=$(cd "$(dirname "$resolved")" && pwd)
-    if [[ -n ${GITHUB_PATH:-} ]]; then
-      echo "$dir" >> "$GITHUB_PATH"
-    fi
-    echo "Using provided activitytool: $resolved"
-    exit 0
-  fi
-  echo "::error title=Activity policy tests::ACTIVITYTOOL='$ACTIVITYTOOL' is not executable" >&2
+fail() {
+  echo "::error title=Activity policy tests::$1" >&2
   exit 2
+}
+
+add_path() {
+  if [[ -n ${GITHUB_PATH:-} ]]; then
+    echo "$1" >> "$GITHUB_PATH"
+  fi
+}
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+# A Docker tag, optionally followed by @sha256:<digest>. Checking it here also
+# keeps the value safe to use in cache paths and in the generated wrapper.
+tag_re='^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$'
+digest_re='^sha256:[0-9a-f]{64}$'
+image_re='^[a-z0-9]+([._-][a-z0-9]+)*(:[0-9]+)?(/[a-z0-9]+([._-]{1,2}[a-z0-9]+)*)+$'
+
+version_tag=${ACTIVITYTOOL_VERSION%%@*}
+version_digest=
+if [[ $ACTIVITYTOOL_VERSION == *@* ]]; then
+  version_digest=${ACTIVITYTOOL_VERSION#*@}
 fi
+if ! [[ $version_tag =~ $tag_re ]] || ! [[ -z $version_digest || $version_digest =~ $digest_re ]]; then
+  fail "activitytool-version '$ACTIVITYTOOL_VERSION' is not a valid image tag; use a milo-os/activity release tag such as vX.Y.Z, optionally pinned as vX.Y.Z@sha256:<digest>"
+fi
+[[ $ACTIVITYTOOL_IMAGE =~ $image_re ]] || fail "ACTIVITYTOOL_IMAGE '$ACTIVITYTOOL_IMAGE' is not a valid image repository"
+
+if [[ -z $version_digest ]]; then
+  echo "::warning title=Activity policy tests::activitytool-version '$ACTIVITYTOOL_VERSION' is a tag without a digest, so the image it names can change. Pin it as $version_tag@sha256:<digest> (docker buildx imagetools inspect $ACTIVITYTOOL_IMAGE:$version_tag)."
+fi
+
+command -v docker > /dev/null || fail "docker is required: activitytool runs from the $ACTIVITYTOOL_IMAGE image"
 
 BIN_DIR=${BIN_DIR:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/activity-policies-bin}
 CACHE_DIR=${CACHE_DIR:-}
+ref=$ACTIVITYTOOL_IMAGE:$ACTIVITYTOOL_VERSION
 
 dest=$BIN_DIR
-if [[ -n $CACHE_DIR ]]; then
-  mkdir -p "$CACHE_DIR"
-  dest=$CACHE_DIR/activitytool-$ACTIVITYTOOL_VERSION
-  if [[ -x $dest/activitytool ]]; then
-    if [[ -n ${GITHUB_PATH:-} ]]; then
-      echo "$dest" >> "$GITHUB_PATH"
-    fi
-    echo "Using cached activitytool $ACTIVITYTOOL_VERSION from $dest"
-    exit 0
-  fi
-  stage_dir=$(mktemp -d "$CACHE_DIR/.activitytool-$ACTIVITYTOOL_VERSION.XXXXXX")
-else
-  mkdir -p "$BIN_DIR"
-  stage_dir=$BIN_DIR
-fi
-
+stage_dir=
 cleanup() {
-  if [[ -n $CACHE_DIR && -d $stage_dir && $stage_dir != "$dest" ]]; then
+  if [[ -n $stage_dir && $stage_dir != "$dest" && -d $stage_dir ]]; then
     rm -rf "$stage_dir"
   fi
 }
 trap cleanup EXIT
 
-install_from_docker() {
-  local image_ref="${ACTIVITYTOOL_IMAGE}:${ACTIVITYTOOL_VERSION}"
-  command -v docker >/dev/null 2>&1 || return 1
-  docker pull "$image_ref" >/dev/null 2>&1 || return 1
-
-  cat > "$stage_dir/activitytool" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-exec docker run --rm -v "\$PWD:/work:ro" -w /work "${image_ref}" "\$@"
-EOF
-  chmod 0755 "$stage_dir/activitytool"
-  return 0
-}
-
-install_from_go() {
-  command -v go >/dev/null 2>&1 || {
-    echo "::error title=Activity policy tests::container image ${ACTIVITYTOOL_IMAGE}:${ACTIVITYTOOL_VERSION} could not be pulled and 'go' is unavailable for fallback install" >&2
-    exit 2
-  }
-  echo "Image ${ACTIVITYTOOL_IMAGE}:${ACTIVITYTOOL_VERSION} not found; building activitytool with go install..."
-  if GOBIN=$stage_dir go install "go.miloapis.com/activity/cmd/activitytool@$ACTIVITYTOOL_VERSION" 2>/dev/null; then
-    return 0
+if [[ -n $CACHE_DIR ]]; then
+  mkdir -p "$CACHE_DIR"
+  dest=$CACHE_DIR/activitytool-${ACTIVITYTOOL_VERSION/@sha256:/-sha256-}
+  if [[ -x $dest/activitytool && -f $dest/image ]]; then
+    cached_ref=$(< "$dest/image")
+    # A miss (the image was pruned) is expected and handled by pulling and
+    # verifying again, so docker's "no such image" is not shown here.
+    if docker image inspect "$cached_ref" > /dev/null 2>&1; then
+      add_path "$dest"
+      echo "Using cached activitytool $ACTIVITYTOOL_VERSION ($cached_ref) from $dest"
+      exit 0
+    fi
   fi
-  echo "Tag $ACTIVITYTOOL_VERSION does not contain cmd/activitytool; installing from @main..."
-  GOBIN=$stage_dir go install "go.miloapis.com/activity/cmd/activitytool@main"
-}
-
-if ! install_from_docker; then
-  install_from_go
+  # Install beside the cache entry and rename it into place, so an
+  # interrupted install never looks like a cached one.
+  stage_dir=$(mktemp -d "$CACHE_DIR/.activitytool.XXXXXX")
+else
+  mkdir -p "$BIN_DIR"
+  stage_dir=$BIN_DIR
 fi
+
+echo "Pulling $ref"
+if ! docker pull --quiet "$ref"; then
+  fail "docker pull $ref failed; see docker's error above. activitytool-version must be a milo-os/activity release whose activitytool image is published."
+fi
+
+if [[ -n $version_digest ]]; then
+  digest=$version_digest
+else
+  digest=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$ref" |
+    awk -v repo="$ACTIVITYTOOL_IMAGE@" 'index($0, repo) == 1 { print substr($0, length(repo) + 1); exit }')
+  [[ $digest =~ $digest_re ]] || fail "could not determine the registry digest of $ref"
+fi
+pinned_ref=$ACTIVITYTOOL_IMAGE@$digest
+
+install -m 0755 "$script_dir/docker-run.sh" "$stage_dir/docker-run.sh"
+printf '%s\n' "$pinned_ref" > "$stage_dir/image"
+cat > "$stage_dir/activitytool" << EOF
+#!/usr/bin/env bash
+# Generated by install-activitytool.sh: runs activitytool from $ref,
+# locked to the digest resolved at install time.
+ACTIVITYTOOL_DOCKER_IMAGE='$pinned_ref' exec bash "\$(dirname "\${BASH_SOURCE[0]}")/docker-run.sh" "\$@"
+EOF
+chmod 0755 "$stage_dir/activitytool"
 
 if [[ -n $CACHE_DIR ]]; then
   rm -rf "$dest"
@@ -86,8 +121,7 @@ if [[ -n $CACHE_DIR ]]; then
   chmod 0755 "$dest"
 fi
 
-if [[ -n ${GITHUB_PATH:-} ]]; then
-  echo "$dest" >> "$GITHUB_PATH"
-fi
-
-echo "Installed activitytool: $("$dest/activitytool" --version 2>&1)"
+# Run the wrapper once, so a broken image or docker setup fails the install.
+version_out=$("$dest/activitytool" --version)
+add_path "$dest"
+echo "Installed activitytool: $version_out"

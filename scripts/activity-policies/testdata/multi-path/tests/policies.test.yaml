@@ -1,0 +1,17 @@
+# Policies come from two sources: a plain folder and a kustomization.
+policy_files:
+  - ../plain-policies
+  - ../kustomized-policies
+
+tests:
+  - name: group policy from the plain folder
+    audit: {verb: create, user: {username: alice@example.com}, objectRef: {apiGroup: iam.miloapis.com, resource: groups, name: platform-admins}}
+    exp_policy: iam.miloapis.com-group
+    exp_rule: create
+    exp_summary: "alice@example.com created group platform-admins"
+
+  - name: project policy from the kustomization
+    audit: {verb: create, user: {username: alice@example.com}, objectRef: {apiGroup: resourcemanager.miloapis.com, resource: projects, name: prod-app}}
+    exp_policy: resourcemanager.miloapis.com-project
+    exp_rule: create
+    exp_summary: "alice@example.com created project prod-app"

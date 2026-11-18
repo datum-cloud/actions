@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Run ActivityPolicy validation and unit tests on a workstation the same way
-# CI runs them: set up activitytool (Docker image or binary), then run check.sh.
-set -uo pipefail
+# CI runs them: set up the pinned activitytool image, then run check.sh.
+#
+# set -e is on; it is turned off only around the two pipelines below, whose
+# first command's status is read from PIPESTATUS.
+set -euo pipefail
 
 usage() {
   cat <<'USAGE'
@@ -19,11 +22,14 @@ Settings are environment variables named after the workflow inputs:
                        relative to SCAN_PATH.
   FAIL_ON_UNTESTED     true to fail when any policy has no tests. Default: false.
   ALLOW_EMPTY          true to pass when nothing is found. Default: false.
-  ACTIVITYTOOL_VERSION Image/module version tag of milo-os/activity.
-  ACTIVITYTOOL_IMAGE   Container image repository (default: ghcr.io/milo-os/activitytool).
-  ACTIVITYTOOL         Path to a local activitytool binary to use instead.
+  ACTIVITYTOOL_VERSION ghcr.io/milo-os/activitytool tag, optionally pinned as
+                       vX.Y.Z@sha256:<digest>. Use the milo-os/activity release
+                       deployed where the policies run. Default: the pin in
+                       install-activitytool.sh.
+  ACTIVITYTOOL_IMAGE   Image repository. Default: ghcr.io/milo-os/activitytool.
 
-Tool wrappers/binaries are cached under ${XDG_CACHE_HOME:-$HOME/.cache}/datum-activity-policies/bin.
+Requires docker. The generated wrapper is cached under
+${XDG_CACHE_HOME:-$HOME/.cache}/datum-activity-policies/bin.
 USAGE
 }
 
@@ -39,11 +45,12 @@ case ${1:-} in
     ;;
 esac
 
-script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 cache_dir=${XDG_CACHE_HOME:-$HOME/.cache}/datum-activity-policies
 
-RUNNER_TEMP=$(mktemp -d "${TMPDIR:-/tmp}/activity-policies.XXXXXX")
-trap 'rm -rf "$RUNNER_TEMP"' EXIT
+RUNNER_TEMP=
+trap '[[ -z $RUNNER_TEMP ]] || rm -rf "$RUNNER_TEMP"' EXIT
+RUNNER_TEMP=$(mktemp -d "${TMPDIR:-/tmp}/activity-policies.XXXXXX") || exit 2
 export RUNNER_TEMP
 export SCAN_PATH=${SCAN_PATH:-.}
 export GITHUB_PATH=$RUNNER_TEMP/path
@@ -63,8 +70,10 @@ to_terminal() {
   '
 }
 
+set +e
 CACHE_DIR=$cache_dir/bin bash "$script_dir/install-activitytool.sh" 2>&1 | to_terminal
 status=${PIPESTATUS[0]}
+set -e
 [[ $status -eq 0 ]] || exit "$status"
 
 while IFS= read -r dir; do
@@ -73,5 +82,8 @@ while IFS= read -r dir; do
 done < "$GITHUB_PATH"
 export PATH
 
+set +e
 bash "$script_dir/check.sh" 2>&1 | to_terminal
-exit "${PIPESTATUS[0]}"
+status=${PIPESTATUS[0]}
+set -e
+exit "$status"
