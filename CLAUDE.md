@@ -183,6 +183,12 @@ Fails when an npm, pnpm, or Yarn lockfile resolves a package from anywhere other
 
 Exit codes: 0 clean, 1 refused source, 2 unparsable or empty lockfile, bad settings, or a required lockfile missing. `scripts/lockfile-check/test-lockfile-check.sh`, run by `test-lockfile-check.yaml` under mawk and original-awk, runs the fixtures in `testdata/` and then weakens each rule in a copy of the scripts to prove the fixtures catch it. See [`docs/lockfile-check/`](docs/lockfile-check/README.md).
 
+### 13. ActivityPolicy Tests (`.github/workflows/test-activity-policies.yaml`)
+
+Validates `ActivityPolicy` manifests (files, directories, and Kustomize directories/components) and runs declarative `*.test.yaml` unit tests offline in the `ghcr.io/milo-os/activitytool` container image, the only supported way to run it (no `go install` or build from source). Logic lives in `scripts/activity-policies/` (`prepare.sh`, `install-activitytool.sh`, `docker-run.sh`, `check.sh`, `run.sh`); the workflow sparse-checks-out only `scripts/activity-policies/*.sh` at its own commit through `job.workflow_repository` and `job.workflow_sha`, then moves them to `$RUNNER_TEMP`. `install-activitytool.sh` pulls the image pinned as `vX.Y.Z@sha256:<digest>` (Renovate-managed, also in the README's Taskfile snippet) and `docker-run.sh` runs it offline, non-root, with the repository root mounted read-only. The local Docker-based Taskfile snippet lives in [`docs/activity-policies/`](docs/activity-policies/README.md), and `scripts/activity-policies/test-activity-policies.sh`, run by `test-activity-policies-action.yaml`, exercises all fixtures in `scripts/activity-policies/testdata/`.
+
+**Inputs:** `path` (default `.`), `policies-path`, `tests-path`, `fail-on-untested` (default `false`), `allow-empty` (default `false`), `activitytool-version`. See [`docs/activity-policies/`](docs/activity-policies/README.md).
+
 ## Common Development Commands
 
 ### Linting Workflows

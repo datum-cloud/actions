@@ -8,7 +8,8 @@
     "**/node_modules/**",
     "scripts/vuln-scan/testdata/**",
     "scripts/code-scan/testdata/**",
-    "scripts/lockfile-check/testdata/**"
+    "scripts/lockfile-check/testdata/**",
+    "scripts/activity-policies/testdata/**"
   ],
   "customManagers": [
     {
@@ -30,6 +31,28 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n[A-Z_]+_VERSION=(?<currentValue>\\S+)"
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "activitytool image tag and digest pinned in the activity-policies installer (the default activitytool-version)",
+      "managerFilePatterns": [
+        "/^scripts/activity-policies/install-activitytool\\.sh$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\nPINNED_VERSION=(?<currentValue>[^@\\s]+)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
+      ],
+      "autoReplaceStringTemplate": "# renovate: datasource={{{datasource}}} depName={{{depName}}}\nPINNED_VERSION={{{newValue}}}{{#if newDigest}}@{{{newDigest}}}{{/if}}"
+    },
+    {
+      "customType": "regex",
+      "description": "activitytool image tag and digest in the README's consumer Taskfile snippet; kept equal to the installer pin by test-activity-policies.sh",
+      "managerFilePatterns": [
+        "/^docs/activity-policies/README\\.md$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n  ACTIVITYTOOL_VERSION: (?<currentValue>[^@\\s]+)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
+      ],
+      "autoReplaceStringTemplate": "# renovate: datasource={{{datasource}}} depName={{{depName}}}\n  ACTIVITYTOOL_VERSION: {{{newValue}}}{{#if newDigest}}@{{{newDigest}}}{{/if}}"
     }
   ],
   "pip-compile": {
@@ -55,6 +78,15 @@
         "scripts/plugin-catalog/requirements.txt"
       ],
       "enabled": false
+    },
+    {
+      "description": "activitytool: stable milo-os/activity releases only (never v0.0.0-* branch builds or floating vX / vX.Y tags), pinned by digest, one PR for every copy of the pin",
+      "matchDepNames": [
+        "ghcr.io/milo-os/activitytool"
+      ],
+      "allowedVersions": "/^v\\d+\\.\\d+\\.\\d+$/",
+      "pinDigests": true,
+      "groupName": "activitytool"
     }
   ]
 }

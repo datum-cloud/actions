@@ -1,0 +1,56 @@
+policy_files:
+  - ../../config/services/activity/policies
+
+tests:
+  - name: create group renders expected summary and link
+    audit:
+      verb: create
+      user:
+        username: alice@example.com
+      objectRef:
+        apiGroup: iam.miloapis.com
+        resource: groups
+        name: platform-admins
+    exp_rule: create
+    exp_summary: "alice@example.com created group platform-admins"
+    exp_change_source: human
+    exp_links:
+      - marker: platform-admins
+        apiGroup: iam.miloapis.com
+        kind: Group
+        name: platform-admins
+
+  - name: system create on group produces no activity
+    policy: iam.miloapis.com-group
+    audit:
+      verb: create
+      user:
+        username: system:serviceaccount:kube-system:controller
+      objectRef:
+        apiGroup: iam.miloapis.com
+        resource: groups
+        name: platform-admins
+    exp_no_match: true
+
+  - name: project create and suspended event render expected summaries
+    audit:
+      verb: create
+      user:
+        username: alice@example.com
+      objectRef:
+        apiGroup: resourcemanager.miloapis.com
+        resource: projects
+        name: billing
+    exp_rule: create
+    exp_summary: "alice@example.com created project billing"
+
+  - name: project suspended event renders english summary
+    event:
+      reason: Suspended
+      reportingController: project-controller
+      regarding:
+        apiVersion: resourcemanager.miloapis.com/v1alpha1
+        kind: Project
+        name: billing
+    exp_rule: suspended
+    exp_summary: "Project billing was suspended"

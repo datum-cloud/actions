@@ -1,0 +1,135 @@
+name: Test Activity Policy Action
+
+on:
+  pull_request:
+    paths:
+      - "scripts/activity-policies/**"
+      - "docs/activity-policies/**"
+      - ".github/workflows/test-activity-policies.yaml"
+      - ".github/workflows/test-activity-policies-action.yaml"
+  push:
+    paths:
+      - "scripts/activity-policies/**"
+      - "docs/activity-policies/**"
+      - ".github/workflows/test-activity-policies.yaml"
+      - ".github/workflows/test-activity-policies-action.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)) }}
+
+jobs:
+  # Runs the scripts against every fixture with the pinned activitytool image,
+  # the installer and Docker wrapper against a stand-in docker, and the tamper
+  # tests.
+  test:
+    name: Test activity-policies scripts and fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Lint scripts
+        run: shellcheck scripts/activity-policies/*.sh
+      - name: Run fixture and tamper tests
+        run: bash scripts/activity-policies/test-activity-policies.sh
+
+  # Calls the reusable workflow end to end on passing fixtures, so the wiring
+  # (script checkout, permissions, install, inputs) is exercised too. A failed
+  # job here would fail the run, and a job that calls a reusable workflow
+  # can't use continue-on-error, so the failing fixtures run in the
+  # expected-failure job below instead.
+  workflow:
+    name: Run reusable workflow (${{ matrix.name }})
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: passing-tests
+            path: scripts/activity-policies/testdata/passing-tests
+            policies-path: ""
+            tests-path: ""
+            fail-on-untested: true
+          - name: nested-path
+            path: scripts/activity-policies/testdata/nested-path/services/foo
+            policies-path: ""
+            tests-path: ""
+            fail-on-untested: false
+          - name: kustomize-patches
+            path: scripts/activity-policies/testdata/kustomize-patches
+            policies-path: ""
+            tests-path: ""
+            fail-on-untested: false
+          - name: multi-path
+            path: scripts/activity-policies/testdata/multi-path
+            policies-path: |
+              plain-policies
+              kustomized-policies
+            tests-path: tests
+            fail-on-untested: true
+    uses: ./.github/workflows/test-activity-policies.yaml
+    with:
+      path: ${{ matrix.path }}
+      policies-path: ${{ matrix.policies-path }}
+      tests-path: ${{ matrix.tests-path }}
+      fail-on-untested: ${{ matrix.fail-on-untested }}
+
+  # Runs the workflow's own steps (install-activitytool.sh, then check.sh)
+  # against the failing fixtures and asserts they fail for the right reason:
+  # exit 1 (policy failure, not a configuration error) with the expected
+  # message. Their ::error annotations are expected.
+  expected-failure:
+    name: Expect failure (${{ matrix.fixture }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fixture: failing-summary
+            policies-path: group-policy.yaml
+            tests-path: group.test.yaml
+            expect: 'got: "alice@example.com created group platform-admins"'
+          - fixture: invalid-policy
+            policies-path: "."
+            tests-path: ""
+            expect: undeclared reference
+    env:
+      SCAN_PATH: scripts/activity-policies/testdata/${{ matrix.fixture }}
+      POLICIES_PATH: ${{ matrix.policies-path }}
+      TESTS_PATH: ${{ matrix.tests-path }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install activitytool
+        run: bash scripts/activity-policies/install-activitytool.sh
+      - name: Validate and test ActivityPolicies (expected to fail)
+        id: check
+        continue-on-error: true
+        run: |
+          set +e
+          bash scripts/activity-policies/check.sh 2>&1 | tee "$RUNNER_TEMP/check.log"
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit "$status"
+      - name: Assert the check failed on the fixture
+        env:
+          OUTCOME: ${{ steps.check.outcome }}
+          STATUS: ${{ steps.check.outputs.status }}
+          EXPECT: ${{ matrix.expect }}
+        run: |
+          if [[ $OUTCOME != failure || $STATUS != 1 ]]; then
+            echo "::error title=Activity policy self-test::check.sh outcome $OUTCOME, exit '$STATUS'; want failure with exit 1"
+            exit 1
+          fi
+          if ! grep -qF -- "$EXPECT" "$RUNNER_TEMP/check.log"; then
+            echo "::error title=Activity policy self-test::check.sh output is missing: $EXPECT"
+            exit 1
+          fi
+          echo "check.sh failed as expected (exit $STATUS)"

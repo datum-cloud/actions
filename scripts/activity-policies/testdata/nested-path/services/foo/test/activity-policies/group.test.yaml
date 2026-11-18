@@ -1,0 +1,17 @@
+# Run with path: services/foo. The policies live outside that path but inside
+# the repository, so the Docker wrapper must mount the repository root.
+policy_files:
+  - ../../../../base/policies
+
+tests:
+  - name: create group renders expected summary
+    audit:
+      verb: create
+      user:
+        username: alice@example.com
+      objectRef:
+        apiGroup: iam.miloapis.com
+        resource: groups
+        name: platform-admins
+    exp_rule: create
+    exp_summary: "alice@example.com created group platform-admins"

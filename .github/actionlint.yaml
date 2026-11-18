@@ -39,3 +39,6 @@ paths:
   .github/workflows/lockfile-check.yaml:
     ignore:
       - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/test-activity-policies.yaml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'
