@@ -46,10 +46,18 @@ VALID = {
 }
 
 
+DEPRECATED = {"message": "sample moved to the Acme catalog.", "replacement": {"catalog": "acme/plugins"}}
+
+
 def variant(change):
     manifest = copy.deepcopy(VALID)
     change(manifest)
     return manifest
+
+
+def deprecated(block):
+    """A change that marks the manifest deprecated with block."""
+    return lambda m: m["spec"].update(deprecated=copy.deepcopy(block))
 
 
 def quietly(function, *args):
@@ -210,11 +218,33 @@ class ValidateTest(unittest.TestCase):
             "unknown selector field": lambda m: m["spec"]["platforms"][0]["selector"].update(matchExpressions=[]),
             "unknown label": lambda m: m["spec"]["platforms"][0]["selector"]["matchLabels"].update(libc="musl"),
             "missing version": lambda m: m["spec"].pop("version"),
+            "deprecation without message": deprecated({"replacement": {"catalog": "acme/plugins"}}),
+            "deprecation with empty message": deprecated({"message": "", "replacement": {"catalog": "acme/plugins"}}),
+            "deprecation without replacement": deprecated({"message": "moved"}),
+            "deprecation without replacement catalog": deprecated({"message": "moved", "replacement": {"name": "other"}}),
+            "replacement catalog with a space": deprecated(
+                {"message": "moved", "replacement": {"catalog": "acme/plugins; curl example.com"}}),
+            "replacement catalog starting with a dash": deprecated(
+                {"message": "moved", "replacement": {"catalog": "-x"}}),
+            "uppercase replacement name": deprecated(
+                {"message": "moved", "replacement": {"catalog": "acme/plugins", "name": "Other"}}),
+            "unknown deprecation field": deprecated({**DEPRECATED, "until": "2027-01-01"}),
         }.items():
             with self.subTest(name):
                 status, output = self.validate({"sample": variant(change)})
                 self.assertEqual(status, 1, output)
                 self.assertIn("::error file=plugins/sample.yaml", output)
+
+    def test_complete_deprecation_passes(self):
+        for name, block in {
+            "owner/repo catalog": DEPRECATED,
+            "https catalog and renamed replacement": {
+                "message": "sample moved.",
+                "replacement": {"catalog": "https://example.com/plugins/index.yaml", "name": "sample-two"}},
+        }.items():
+            with self.subTest(name):
+                status, output = self.validate({"sample": variant(deprecated(block))})
+                self.assertEqual(status, 0, output)
 
 
 class DownloadTest(unittest.TestCase):
@@ -308,6 +338,12 @@ class AgreementTest(unittest.TestCase):
         "missing version": lambda m: m["spec"].pop("version"),
         "no platforms": lambda m: m["spec"].update(platforms=[]),
         "missing name": lambda m: m["metadata"].pop("name"),
+        "complete deprecation": deprecated(DEPRECATED),
+        "empty deprecation": deprecated({}),
+        "deprecation without message": deprecated({"replacement": {"catalog": "acme/plugins"}}),
+        "deprecation with empty message": deprecated({"message": "", "replacement": {"catalog": "acme/plugins"}}),
+        "deprecation without replacement": deprecated({"message": "moved"}),
+        "deprecation without replacement catalog": deprecated({"message": "moved", "replacement": {"name": "other"}}),
     }
 
     def test_schema_never_accepts_what_datumctl_rejects(self):
@@ -326,6 +362,13 @@ class AgreementTest(unittest.TestCase):
         index = yaml.safe_dump({"apiVersion": "datumctl.datum.net/v1alpha1",
                                 "kind": "PluginList", "items": [VALID]})
         self.assertEqual(catalog.datumctl_problems(os.environ["DATUMCTL"], index), [])
+
+    def test_datumctl_checks_deprecations(self):
+        """The deprecation cases above only mean something if datumctl rejects some of them."""
+        index = yaml.safe_dump({"apiVersion": "datumctl.datum.net/v1alpha1",
+                                "kind": "PluginList", "items": [variant(deprecated({}))]})
+        self.assertNotEqual(catalog.datumctl_problems(os.environ["DATUMCTL"], index), [],
+                            "datumctl accepts an empty deprecation; pin a release that checks deprecations")
 
 
 if __name__ == "__main__":

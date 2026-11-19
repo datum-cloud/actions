@@ -52,6 +52,41 @@
           "type": "string",
           "format": "uri"
         },
+        "deprecated": {
+          "type": "object",
+          "required": [
+            "message",
+            "replacement"
+          ],
+          "properties": {
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Why the plugin is deprecated, shown in datumctl's warning."
+            },
+            "replacement": {
+              "type": "object",
+              "required": [
+                "catalog"
+              ],
+              "properties": {
+                "catalog": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._~:/@+%][A-Za-z0-9._~:/@+%-]*$",
+                  "description": "Source of the catalog that holds the replacement, as `datumctl plugin index add` takes it: a GitHub owner/repo or an HTTPS URL. Only characters datumctl will print in a copy-paste command, so it can show users how to switch."
+                },
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]*$",
+                  "description": "The replacement plugin's name. Defaults to this plugin's name."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Marks the plugin deprecated and names its replacement in another catalog. datumctl v0.25.0 and later warns on install, upgrade, and listing and shows the commands to switch; older releases ignore it."
+        },
         "version": {
           "type": "string",
           "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]",

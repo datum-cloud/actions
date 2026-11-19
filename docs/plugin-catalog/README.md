@@ -148,11 +148,39 @@ schema requires:
 - An HTTPS download URL with a host.
 - A lowercase hex `sha256`.
 - A platform selector of `matchLabels` with only `os` and `arch`.
+- In a deprecation, a `replacement.catalog` that `datumctl` can print in a
+  copy-paste command: no spaces or shell characters, and no leading `-`. A
+  replacement `name`, when set, follows the same pattern as `metadata.name`.
 
 `test_catalog.py` checks the schema against `datumctl plugin index validate`
 on cases the two could disagree on, and fails when the schema accepts one that
-`datumctl` rejects. The validate and health workflows also run `datumctl` on
-the catalog's own index.
+`datumctl` rejects. It runs against the `datumctl` release pinned in
+`install-datumctl.sh`, and fails if that release doesn't check deprecations,
+since the deprecation cases would then pass without testing anything. The
+validate and health workflows also run `datumctl` on the catalog's own index.
+
+## Deprecating a plugin
+
+When a plugin moves to another catalog, mark its entry deprecated instead of
+removing it, so people who installed it from this catalog keep upgrading
+while they switch:
+
+```yaml
+spec:
+  # ...version, platforms, and other fields as before
+  deprecated:
+    message: ipam moved to the Milo plugin catalog.
+    replacement:
+      catalog: milo-os/cli-plugins  # a source, as `plugin index add` takes
+      name: ipam                    # optional; defaults to this name
+```
+
+`message` and `replacement.catalog` are required. `datumctl` v0.25.0 and later
+warns when someone installs, upgrades, or lists the plugin and shows the
+commands to add the replacement's catalog and install from it. Older releases
+ignore the field. The release workflows keep updating a deprecated entry, and
+the block survives each update, so remove the entry only after a deprecation
+period.
 
 ## Inputs
 
