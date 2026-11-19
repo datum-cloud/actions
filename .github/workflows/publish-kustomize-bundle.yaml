@@ -48,7 +48,7 @@ on:
         description: "Generated labels for the bundle"
         value: ${{ jobs.publish-kustomize-bundle.outputs.labels }}
       digest:
-        description: "Digest of the published bundle"
+        description: "Digest of the bundle pushed under the first, highest-priority tag; each tag's push has its own digest"
         value: ${{ jobs.publish-kustomize-bundle.outputs.digest }}
 
 jobs:
@@ -255,7 +255,14 @@ jobs:
               --revision="${tag_version}@sha1:$(git rev-parse HEAD)" \
               --output=json)
 
-            CURRENT_DIGEST=$(echo "$RESULT" | jq -r '.digest')
+            CURRENT_DIGEST=$(echo "$RESULT" | jq -r '.digest // empty')
+            if [ -z "${CURRENT_DIGEST}" ]; then
+              echo "::error::flux push artifact returned no digest for ${tag}"
+              exit 1
+            fi
+            if [ -z "${DIGEST}" ]; then
+              DIGEST="${CURRENT_DIGEST}"
+            fi
             echo "✅ Push #${PUSH_COUNT} complete"
             echo "   Digest: ${CURRENT_DIGEST}"
             
