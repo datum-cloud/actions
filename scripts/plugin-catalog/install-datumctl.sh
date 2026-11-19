@@ -7,7 +7,7 @@
 set -euo pipefail
 
 # renovate: datasource=github-releases depName=datum-cloud/datumctl
-DATUMCTL_VERSION=v0.23.3
+DATUMCTL_VERSION=v0.25.0
 
 if [[ -n ${DATUMCTL:-} ]]; then
   command -v "$DATUMCTL"
