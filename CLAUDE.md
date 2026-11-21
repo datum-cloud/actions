@@ -41,7 +41,7 @@ Publishes Kustomize bundles to GitHub Container Registry using Flux CLI.
 **Outputs:**
 - `tags`: Generated tags for the bundle
 - `labels`: Generated labels for the bundle
-- `digest`: Digest of the published bundle
+- `digest`: Digest of the bundle pushed under the first, highest-priority tag (each tag's push has its own digest, since the revision annotation differs)
 
 ### 3. Publish npm Package (`.github/workflows/publish-npm-package.yaml`)
 
