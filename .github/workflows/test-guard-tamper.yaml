@@ -1,0 +1,62 @@
+name: Test guard tamper
+
+on:
+  pull_request:
+    paths:
+      - "scripts/guard-tamper/**"
+      - ".github/workflows/guard-tamper.yaml"
+      - ".github/workflows/test-guard-tamper.yaml"
+  push:
+    paths:
+      - "scripts/guard-tamper/**"
+      - ".github/workflows/guard-tamper.yaml"
+      - ".github/workflows/test-guard-tamper.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (startsWith(github.ref, 'refs/heads/') && github.ref != format('refs/heads/{0}', github.event.repository.default_branch)) }}
+
+jobs:
+  test:
+    name: Test tamper outcomes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint scripts
+        run: shellcheck scripts/guard-tamper/*.sh
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: scripts/guard-tamper/testdata/fixture/go.mod
+          cache: false
+      - name: Install go-mutesting
+        run: bash scripts/guard-tamper/install.sh
+      - name: Run fixture tests
+        run: bash scripts/guard-tamper/test-guard-tamper.sh
+
+  workflow:
+    name: Run reusable workflow
+    uses: ./.github/workflows/guard-tamper.yaml
+    with:
+      path: scripts/guard-tamper/testdata/fixture
+      base: 4b825dc642cb6eb9a060e54bf8d69288fbee4904
+
+  workflow-outputs:
+    name: Check reusable workflow outputs
+    needs: workflow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the untested guard is reported and the tested one is not
+        env:
+          SURVIVORS: ${{ needs.workflow.outputs.survivors }}
+          GUARDS: ${{ needs.workflow.outputs.guards }}
+          KILLED: ${{ needs.workflow.outputs.killed }}
+        run: bash scripts/guard-tamper/check-outputs.sh
