@@ -116,12 +116,18 @@ else
   fail "no changed Go lines passes (rc=$rc)"
 fi
 
-run overcap GT_REQUIRED=true GT_MAX_MUTANTS=1
-if (( rc == 1 )) && grep -q 'exceed max-mutants' "$scratch/overcap.log"; then
-  pass "required mode fails over the mutant cap"
+run overcap GT_REQUIRED=false GT_MAX_MUTANTS=1
+if (( rc == 0 )) && grep -q -x 'truncated=true' "$scratch/overcap.out" && grep -q -x 'skipped-mutants=3' "$scratch/overcap.out" && grep -q '^::warning title=Guard tamper truncated::ran 1 of 4 mutants' "$scratch/overcap.log"; then
+  pass "over the mutant cap, advisory mode runs the cap and says it truncated"
 else
-  fail "required mode fails over the mutant cap (rc=$rc)"
+  fail "over the mutant cap, advisory mode runs the cap and says it truncated (rc=$rc)"; cat "$scratch/overcap.log"
 fi
+
+run overcaprequired GT_REQUIRED=true GT_MAX_MUTANTS=1
+if (( rc == 1 )); then pass "required mode fails when the run was truncated"; else fail "required mode fails when the run was truncated (rc=$rc)"; fi
+
+run undercap GT_REQUIRED=false GT_MAX_MUTANTS=4
+if grep -q -x 'truncated=false' "$scratch/undercap.out"; then pass "at the cap nothing is truncated"; else fail "at the cap nothing is truncated"; fi
 
 run emptyranges GT_REQUIRED=false GT_RANGES_FILE=/dev/null GT_BASE=
 if (( rc == 0 )) && grep -q 'nothing to tamper' "$scratch/emptyranges.log"; then

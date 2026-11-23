@@ -9,20 +9,7 @@ prefix=$5
 required=${GT_REQUIRED:-false}
 
 guard_line() {
-  awk -v L="$2" '
-    function indent(s) { match(s, /^[[:space:]]*/); return RLENGTH }
-    { t[NR] = $0 }
-    END {
-      g = "^[[:space:]]*(} else )?(if|case|default|switch|select|for)([[:space:]]|:|$)"
-      if (t[L] ~ g) { print L; exit }
-      want = indent(t[L])
-      for (k = L - 1; k >= 1; k--) {
-        if (t[k] ~ /^[[:space:]]*$/) continue
-        if (indent(t[k]) < want) { print k; exit }
-      }
-      print L
-    }
-  ' "$1"
+  awk -v L="$2" -f "$(dirname "${BASH_SOURCE[0]}")/guard-line.awk" "$1"
 }
 
 count() { awk -F'\t' -v v="$1" '$2 == v { n++ } END { print n + 0 }' "$verdicts"; }
@@ -49,6 +36,14 @@ done < "$mutants"
 sort -t "$(printf '\t')" -k1,1 -k2,2n -k4,4n "$out/survivors.tsv" -o "$out/survivors.tsv"
 awk -F'\t' '!seen[$1 FS $2]++ { print $1 "\t" $2 }' "$out/survivors.tsv" > "$out/guards.tsv"
 guards=$(wc -l < "$out/guards.tsv" | tr -d ' ')
+skipped=0
+unchecked=0
+if [[ -s $out/skipped.tsv ]]; then
+  skipped=$(wc -l < "$out/skipped.tsv" | tr -d ' ')
+  cut -f6 "$out/skipped.tsv" | sort -u > "$out/unchecked-all.txt"
+  grep -v -x -F -f <(while IFS=$'\t' read -r _ f _ fl _; do printf '%s:%s\n' "$f" "$(guard_line "$source_root/$f" "$fl")"; done < "$mutants") "$out/unchecked-all.txt" > "$out/unchecked.txt" || true
+  unchecked=$(wc -l < "$out/unchecked.txt" | tr -d ' ')
+fi
 
 level=warning
 if [[ $required == true ]]; then level=error; fi
@@ -60,8 +55,20 @@ if [[ $required == true ]]; then level=error; fi
   echo "|---|---|---|---|---|"
   echo "| $guards | $survived | $killed | $uncompiled | $filtered |"
   echo
+  if (( skipped > 0 )); then
+    echo "**Truncated.** $skipped of ${GT_TOTAL_MUTANTS:-?} mutants were not run (max-mutants), so a guard below the cut can still hide an untested clause. Guards with no mutant run: $unchecked."
+    echo
+    if (( unchecked > 0 )); then
+      sed "s|^|- \`$prefix|; s|\$|\`|" "$out/unchecked.txt"
+      echo
+    fi
+  fi
   if (( guards == 0 )); then
-    echo "Every guard-shaped mutation on the changed lines fails a test."
+    if (( skipped > 0 )); then
+      echo "Every mutation that ran fails a test."
+    else
+      echo "Every guard-shaped mutation on the changed lines fails a test."
+    fi
   else
     echo "Each guard below can be removed or weakened and every test still passes. Add a test that fails without it."
   fi
@@ -92,8 +99,12 @@ while IFS=$'\t' read -r file g; do
 done < "$out/guards.tsv"
 
 echo
-echo "guards=$guards surviving=$survived killed=$killed uncompiled=$uncompiled filtered=$filtered"
+echo "guards=$guards surviving=$survived killed=$killed uncompiled=$uncompiled filtered=$filtered skipped=$skipped unchecked-guards=$unchecked"
 echo "Report: $out/report.md"
+
+if (( skipped > 0 )); then
+  echo "::$level title=Guard tamper truncated::ran $judged of ${GT_TOTAL_MUTANTS:-?} mutants; $skipped not run and $unchecked guard(s) not checked. Raise max-mutants or split the pull request."
+fi
 
 if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then cat "$out/report.md" >> "$GITHUB_STEP_SUMMARY"; fi
 if [[ -n ${GITHUB_OUTPUT:-} ]]; then
@@ -101,6 +112,8 @@ if [[ -n ${GITHUB_OUTPUT:-} ]]; then
     echo "survivors=$guards"
     echo "surviving-mutants=$survived"
     echo "killed=$killed"
+    if (( skipped > 0 )); then echo "truncated=true"; else echo "truncated=false"; fi
+    echo "skipped-mutants=$skipped"
     echo "uncompiled=$uncompiled"
     echo "guards<<GUARD_TAMPER_EOF"
     awk -F'\t' -v p="$prefix" '{ print p $1 ":" $2 }' "$out/guards.tsv"
@@ -108,7 +121,7 @@ if [[ -n ${GITHUB_OUTPUT:-} ]]; then
   } >> "$GITHUB_OUTPUT"
 fi
 
-if (( guards > 0 )) && [[ $required == true ]]; then
-  echo "::error title=Guard tamper::$guards guard(s) survive tampering"
+if [[ $required == true ]] && (( guards > 0 || skipped > 0 )); then
+  echo "::error title=Guard tamper::$guards guard(s) survive tampering, $skipped mutant(s) not run"
   exit 1
 fi

@@ -59,4 +59,5 @@ jobs:
           SURVIVORS: ${{ needs.workflow.outputs.survivors }}
           GUARDS: ${{ needs.workflow.outputs.guards }}
           KILLED: ${{ needs.workflow.outputs.killed }}
+          TRUNCATED: ${{ needs.workflow.outputs.truncated }}
         run: bash scripts/guard-tamper/check-outputs.sh

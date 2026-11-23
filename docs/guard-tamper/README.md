@@ -77,7 +77,8 @@ jobs:
 | `env-setup` | None | One shell command run in `path` before testing. Write variables to `$GITHUB_ENV`. |
 | `go-test-flags` | None | Extra flags for every `go test`, such as `-tags=integration`. |
 | `ignore-regexp` | Logger and Event calls | Extended regular expression. A statement removal whose first removed line matches is skipped. |
-| `max-mutants` | `60` | Most mutants to run. Over this, none run: the job warns, or fails when `required` is `true`. |
+| `max-mutants` | `60` | Most mutants to run. Over this, the run is truncated. See [Large pull requests](#large-pull-requests). |
+| `priority-regexp` | Authorization, tenancy, limit and race terms | Case-insensitive extended regular expression. When truncated, guards whose line or removed code matches run first. |
 | `parallel` | `4` | Mutants tested at once, each in its own copy of the repository. |
 | `test-timeout` | `300` | Seconds for one package's tests against one mutant. A timeout counts as caught. |
 | `timeout-minutes` | `20` | Job timeout. |
@@ -89,14 +90,29 @@ jobs:
 | `survivors` | Guards with at least one surviving mutant. |
 | `guards` | Newline-separated `file:line` of each surviving guard. |
 | `killed` | Mutants a test caught. |
+| `truncated` | `true` when some mutants were not run because of `max-mutants`. |
 
 ## Cost
 
-Finding the mutants type-checks each changed file, about 20 seconds a file.
-Then each mutant runs its package's tests once. Total time is roughly changed
-files × 20 seconds plus mutants × package test time, both divided by
-`parallel`. A pull request outside a `pull_request` event,
-or with no changed Go lines, finishes without running a mutant.
+Finding the mutants type-checks each changed file, about 20 seconds a file
+on a laptop. Then each mutant runs its package's tests once, `parallel` at a
+time.
+
+## Large pull requests
+
+A large feature pull request finds far more mutants than the default cap: the
+change that added server-side apply to netbox-provider finds 400. Over
+`max-mutants`, the job runs that many and skips the rest:
+
+1. Guards whose line or removed code matches `priority-regexp` run first,
+   then guards in a file whose path matches, then the rest.
+2. Within that order, each guard gets one mutant before any guard gets a
+   second.
+
+The truncation is never silent. The summary lists every guard left unchecked,
+the job adds a warning annotation, and the `truncated` output is `true`. When
+`required` is `true`, a truncated run fails. Raise `max-mutants` or split the
+pull request.
 
 ## Report
 

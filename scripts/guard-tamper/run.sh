@@ -11,21 +11,13 @@ allowed=(branch/if branch/else branch/case expression/remove statement/remove)
 default_ignore='^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*(\([^()]*\))?\.)*([Ll]og|[Ll]ogger|klog|slog|logr|[Rr]ecorder|[Ee]ventRecorder|FromContext\([^()]*\))(\.V\([^()]*\))?\.(Info|Infof|Infow|Error|Errorf|Errorw|Debug|Debugf|Warn|Warnf|Warning|Warningf|Print|Printf|Println|Event|Eventf|AnnotatedEventf)\('
 export GT_IGNORE_REGEXP=${GT_IGNORE_REGEXP:-$default_ignore}
 export GT_REQUIRED=$required
+default_priority='auth|permission|forbid|allow|deny|owner|tenan|project|organi[sz]ation|principal|caller|token|secret|signature|verify|quota|limit|max|resourceversion|conflict|race|lease|epoch'
+priority=${GT_PRIORITY_REGEXP:-$default_priority}
 
 write_outputs_empty() {
   if [[ -n ${GITHUB_OUTPUT:-} ]]; then
-    printf 'survivors=0\nsurviving-mutants=0\nkilled=0\nuncompiled=0\nguards=\n' >> "$GITHUB_OUTPUT"
+    printf 'survivors=0\nsurviving-mutants=0\nkilled=0\nuncompiled=0\ntruncated=false\nskipped-mutants=0\nguards=\n' >> "$GITHUB_OUTPUT"
   fi
-}
-
-over_limit() {
-  local level=warning
-  if [[ $required == true ]]; then level=error; fi
-  echo "::$level title=Guard tamper::$1"
-  if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then printf '## Guard tamper\n\n%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"; fi
-  write_outputs_empty
-  if [[ $required == true ]]; then exit 1; fi
-  exit 0
 }
 
 [[ -f $module/go.mod ]] || { echo "::error title=Guard tamper::no go.mod in $module"; exit 1; }
@@ -137,12 +129,31 @@ if (( total == 0 )); then
   write_outputs_empty
   exit 0
 fi
+cp "$out/mutants/mutants.tsv" "$out/selected.tsv"
+: > "$out/skipped.tsv"
 if (( total > max )); then
-  over_limit "$total mutants on changed lines exceed max-mutants ($max); none were run. Split the pull request or raise max-mutants."
+  : > "$out/scored.tsv"
+  while IFS=$'\t' read -r id file pkg first last; do
+    g=$(awk -v L="$first" -f "$scripts/guard-line.awk" "$module/$file")
+    text=$(sed -n "${g}p" "$module/$file"; sed -n 's/^< //p' "$out/mutants/$id.diff")
+    score=0
+    if grep -q -i -E -- "$priority" <<< "$text"; then
+      score=2
+    elif grep -q -i -E -- "$priority" <<< "$file"; then
+      score=1
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$file" "$pkg" "$first" "$last" "$score" "$file:$g" >> "$out/scored.tsv"
+  done < "$out/mutants/mutants.tsv"
+  sort -t "$(printf '\t')" -k6,6nr -k1,1 "$out/scored.tsv" |
+    awk -F'\t' -v OFS='\t' '{ print ++rank[$7], $0 }' |
+    sort -t "$(printf '\t')" -k7,7nr -k1,1n -k2,2 > "$out/ranked.tsv"
+  head -n "$max" "$out/ranked.tsv" | cut -f2-6 > "$out/selected.tsv"
+  tail -n +"$((max + 1))" "$out/ranked.tsv" | cut -f2-6,8 > "$out/skipped.tsv"
+  echo "$total mutants exceed max-mutants ($max): running $max, guards matching the priority pattern first, one mutant per guard before a second"
 fi
 
 read -r -a flags <<< "${GT_GO_TEST_FLAGS:-}"
-mapfile -t packages < <(cut -f3 "$out/mutants/mutants.tsv" | sort -u)
+mapfile -t packages < <(cut -f3 "$out/selected.tsv" | sort -u)
 echo "Baseline: ${packages[*]}"
 if ! (cd "$work0" && go test -count=1 -timeout "${GT_TEST_TIMEOUT:-300}s" "${flags[@]}" "${packages[@]}") > "$out/baseline.log" 2>&1; then
   echo "::error title=Guard tamper::tests fail before any mutation; no verdict is possible"
@@ -151,7 +162,7 @@ if ! (cd "$work0" && go test -count=1 -timeout "${GT_TEST_TIMEOUT:-300}s" "${fla
 fi
 
 for (( i = 0; i < parallel; i++ )); do : > "$out/shard-$i.tsv"; done
-awk -F'\t' -v p="$parallel" -v o="$out" '{ print > (o "/shard-" ((NR - 1) % p) ".tsv") }' "$out/mutants/mutants.tsv"
+awk -F'\t' -v p="$parallel" -v o="$out" '{ print > (o "/shard-" ((NR - 1) % p) ".tsv") }' "$out/selected.tsv"
 
 pids=()
 for (( i = 0; i < parallel; i++ )); do
@@ -165,4 +176,4 @@ if (( failed )); then echo "::error title=Guard tamper::a test worker failed"; e
 cat "$out"/verdicts-*.tsv > "$out/verdicts.tsv"
 
 cp "$out/mutants/"*.diff "$out/"
-bash "$scripts/report.sh" "$out/mutants/mutants.tsv" "$out/verdicts.tsv" "$module" "$out" "$modrel"
+GT_TOTAL_MUTANTS=$total bash "$scripts/report.sh" "$out/selected.tsv" "$out/verdicts.tsv" "$module" "$out" "$modrel"

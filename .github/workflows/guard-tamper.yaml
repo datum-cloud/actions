@@ -28,9 +28,13 @@ on:
         type: string
         default: ""
       max-mutants:
-        description: Most mutants to run. Over this, no mutant runs and the job warns, or fails when `required` is true
+        description: Most mutants to run. Over this, the job runs this many, guards matching `priority-regexp` first and one mutant per guard before a second, and reports the truncation. A truncated run fails when `required` is true
         type: number
         default: 60
+      priority-regexp:
+        description: Case-insensitive extended regular expression for guards to run first when over `max-mutants`. Empty uses the default authorization, tenancy, limit and race pattern
+        type: string
+        default: ""
       parallel:
         description: Mutants tested at once, each in its own copy of the repository
         type: number
@@ -53,6 +57,9 @@ on:
       killed:
         description: Number of mutants a test caught
         value: ${{ jobs.tamper.outputs.killed }}
+      truncated:
+        description: "`true` when more mutants were found than `max-mutants` and some were not run"
+        value: ${{ jobs.tamper.outputs.truncated }}
 
 permissions:
   contents: read
@@ -68,6 +75,7 @@ jobs:
       survivors: ${{ steps.run.outputs.survivors }}
       guards: ${{ steps.run.outputs.guards }}
       killed: ${{ steps.run.outputs.killed }}
+      truncated: ${{ steps.run.outputs.truncated }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -89,6 +97,7 @@ jobs:
           path: .guard-tamper-action
           sparse-checkout: |
             /scripts/guard-tamper/*.sh
+            /scripts/guard-tamper/*.awk
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -120,6 +129,7 @@ jobs:
           GT_GO_TEST_FLAGS: ${{ inputs.go-test-flags }}
           GT_IGNORE_REGEXP: ${{ inputs.ignore-regexp }}
           GT_MAX_MUTANTS: ${{ inputs.max-mutants }}
+          GT_PRIORITY_REGEXP: ${{ inputs.priority-regexp }}
           GT_PARALLEL: ${{ inputs.parallel }}
           GT_TEST_TIMEOUT: ${{ inputs.test-timeout }}
         run: bash "$SCRIPTS/run.sh"
