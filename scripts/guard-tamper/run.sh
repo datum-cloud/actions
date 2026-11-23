@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+started=$(date +%s)
 scripts=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 module=${GT_PATH:-.}
 required=${GT_REQUIRED:-false}
@@ -11,12 +12,22 @@ allowed=(branch/if branch/else branch/case expression/remove statement/remove)
 default_ignore='^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*(\([^()]*\))?\.)*([Ll]og|[Ll]ogger|klog|slog|logr|[Rr]ecorder|[Ee]ventRecorder|FromContext\([^()]*\))(\.V\([^()]*\))?\.(Info|Infof|Infow|Error|Errorf|Errorw|Debug|Debugf|Warn|Warnf|Warning|Warningf|Print|Printf|Println|Event|Eventf|AnnotatedEventf)\('
 export GT_IGNORE_REGEXP=${GT_IGNORE_REGEXP:-$default_ignore}
 export GT_REQUIRED=$required
-default_priority='auth|permission|forbid|allow|deny|owner|tenan|project|organi[sz]ation|principal|caller|token|secret|signature|verify|quota|limit|max|resourceversion|conflict|race|lease|epoch'
+default_priority='authori[sz]|authenticat|permission|forbid|unauthori[sz]ed|denied|tenan|principal|impersonat|caller|signature|resourceversion|quota|conflict|race|lease|epoch'
 priority=${GT_PRIORITY_REGEXP:-$default_priority}
+
+budget=${GT_BUDGET_SECONDS:-}
+if [[ -z $budget && -n ${GT_JOB_TIMEOUT_MINUTES:-} ]]; then
+  budget=$(( (GT_JOB_TIMEOUT_MINUTES - 5) * 60 ))
+  (( budget >= 60 )) || budget=60
+fi
+if [[ -n $budget ]]; then
+  export GT_DEADLINE=$(( started + budget ))
+  echo "Time budget: ${budget}s; no mutant starts after that"
+fi
 
 write_outputs_empty() {
   if [[ -n ${GITHUB_OUTPUT:-} ]]; then
-    printf 'survivors=0\nsurviving-mutants=0\nkilled=0\nuncompiled=0\ntruncated=false\nskipped-mutants=0\nguards=\n' >> "$GITHUB_OUTPUT"
+    printf 'survivors=0\nsurviving-mutants=0\nkilled=0\nuncompiled=0\ntruncated=false\nskipped-mutants=0\ntimed-out=0\nflaky=0\nguards=\n' >> "$GITHUB_OUTPUT"
   fi
 }
 
@@ -34,8 +45,14 @@ mkdir -p "$out/mutants"
 if [[ -n ${GT_RANGES_FILE:-} ]]; then
   cp "$GT_RANGES_FILE" "$out/ranges.raw"
 else
-  if [[ -z ${GT_BASE:-} ]]; then
-    echo "::notice title=Guard tamper::not a pull request and no base given; nothing to tamper"
+  if [[ -z ${GT_BASE:-} || ${GT_EVENT:-} == pull_request_target ]]; then
+    reason="no base commit to diff against: run it on pull_request, or pass base"
+    if [[ ${GT_EVENT:-} == pull_request_target ]]; then reason="pull_request_target checks out the base branch, so there is no diff: run it on pull_request"; fi
+    if [[ $required == true ]]; then
+      echo "::error title=Guard tamper::$reason"
+      exit 1
+    fi
+    echo "::notice title=Guard tamper::$reason; nothing to tamper"
     write_outputs_empty
     exit 0
   fi
@@ -45,10 +62,12 @@ else
     from=$(git -C "$module" merge-base "$GT_BASE" HEAD)
   fi
   git -C "$module" diff -U0 --no-color --no-ext-diff --relative --src-prefix=a/ --dst-prefix=b/ "$from" HEAD -- '*.go' > "$out/diff.patch"
-  bash "$scripts/diff-ranges.sh" < "$out/diff.patch" > "$out/ranges.raw"
+  bash "$scripts/diff-ranges.sh" "$out/deletions.tsv" < "$out/diff.patch" > "$out/ranges.raw"
 fi
 
 : > "$out/ranges.tsv"
+[[ -f $out/deletions.tsv ]] || : > "$out/deletions.tsv"
+deletions=$(wc -l < "$out/deletions.tsv" | tr -d ' ')
 while IFS=$'\t' read -r file start end; do
   [[ -f $module/$file ]] || continue
   if head -n 30 "$module/$file" | grep -q -E '^// Code generated .* DO NOT EDIT\.$'; then continue; fi
@@ -56,8 +75,10 @@ while IFS=$'\t' read -r file start end; do
 done < "$out/ranges.raw"
 
 if [[ ! -s $out/ranges.tsv ]]; then
-  echo "No changed non-test Go lines in $module; nothing to tamper."
-  if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then printf '## Guard tamper\n\nNo changed non-test Go lines; nothing to tamper.\n' >> "$GITHUB_STEP_SUMMARY"; fi
+  msg="No added or changed non-test Go lines; nothing to tamper."
+  if (( deletions > 0 )); then msg="$msg $deletions hunk(s) only delete lines, and deleted code has nothing to mutate, so a removed guard is not checked."; fi
+  echo "$msg"
+  if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then printf '## Guard tamper\n\n%s\n' "$msg" >> "$GITHUB_STEP_SUMMARY"; fi
   write_outputs_empty
   exit 0
 fi
@@ -124,8 +145,8 @@ fi
 total=$(wc -l < "$out/mutants/mutants.tsv" | tr -d ' ')
 echo "$total mutants on changed lines"
 if (( total == 0 )); then
-  echo "No guard-shaped code on the changed lines."
-  if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then printf '## Guard tamper\n\nNo guard-shaped code on the changed lines.\n' >> "$GITHUB_STEP_SUMMARY"; fi
+  echo "::warning title=Guard tamper::Go lines changed but none holds a guard-shaped mutation (if, case, && or || condition, or removable statement); nothing was tested"
+  if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then printf '## Guard tamper\n\nGo lines changed, but none holds a guard-shaped mutation, so nothing was tested.\n' >> "$GITHUB_STEP_SUMMARY"; fi
   write_outputs_empty
   exit 0
 fi
@@ -155,10 +176,28 @@ fi
 read -r -a flags <<< "${GT_GO_TEST_FLAGS:-}"
 mapfile -t packages < <(cut -f3 "$out/selected.tsv" | sort -u)
 echo "Baseline: ${packages[*]}"
-if ! (cd "$work0" && go test -count=1 -timeout "${GT_TEST_TIMEOUT:-300}s" "${flags[@]}" "${packages[@]}") > "$out/baseline.log" 2>&1; then
-  echo "::error title=Guard tamper::tests fail before any mutation; no verdict is possible"
-  tail -n 40 "$out/baseline.log"
-  exit 1
+baseline_timeout=${GT_TEST_TIMEOUT:-300}
+if [[ -n ${GT_DEADLINE:-} ]] && (( GT_DEADLINE - $(date +%s) < baseline_timeout )); then
+  baseline_timeout=$(( GT_DEADLINE - $(date +%s) ))
+fi
+out_of_time=0
+if (( baseline_timeout < 5 )); then
+  out_of_time=1
+elif ! (cd "$work0" && go test -count=1 -timeout "${baseline_timeout}s" "${flags[@]}" "${packages[@]}") > "$out/baseline.log" 2>&1; then
+  if [[ -n ${GT_DEADLINE:-} ]] && grep -q -E '^panic: test timed out after' "$out/baseline.log" && (( $(date +%s) + 5 >= GT_DEADLINE )); then
+    out_of_time=1
+  else
+    echo "::error title=Guard tamper::tests fail before any mutation; no verdict is possible"
+    tail -n 40 "$out/baseline.log"
+    exit 1
+  fi
+fi
+if (( out_of_time )); then
+  echo "Time budget spent before the baseline finished; no mutant runs"
+  awk -F'\t' -v OFS='\t' '{ print $1, "unrun" }' "$out/selected.tsv" > "$out/verdicts.tsv"
+  cp "$out/mutants/"*.diff "$out/"
+  GT_TOTAL_MUTANTS=$total GT_DELETION_HUNKS=$deletions bash "$scripts/report.sh" "$out/selected.tsv" "$out/verdicts.tsv" "$module" "$out" "$modrel"
+  exit $?
 fi
 
 for (( i = 0; i < parallel; i++ )); do : > "$out/shard-$i.tsv"; done
@@ -176,4 +215,4 @@ if (( failed )); then echo "::error title=Guard tamper::a test worker failed"; e
 cat "$out"/verdicts-*.tsv > "$out/verdicts.tsv"
 
 cp "$out/mutants/"*.diff "$out/"
-GT_TOTAL_MUTANTS=$total bash "$scripts/report.sh" "$out/selected.tsv" "$out/verdicts.tsv" "$module" "$out" "$modrel"
+GT_TOTAL_MUTANTS=$total GT_DELETION_HUNKS=$deletions bash "$scripts/report.sh" "$out/selected.tsv" "$out/verdicts.tsv" "$module" "$out" "$modrel"

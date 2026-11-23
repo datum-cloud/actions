@@ -136,6 +136,44 @@ else
   fail "empty ranges pass (rc=$rc)"
 fi
 
+run nobaserequired GT_REQUIRED=true GT_BASE=
+if (( rc == 1 )) && grep -q 'no base commit' "$scratch/nobaserequired.log"; then
+  pass "required mode fails when there is no base to diff against"
+else
+  fail "required mode fails when there is no base to diff against (rc=$rc)"
+fi
+
+run nobaseadvisory GT_REQUIRED=false GT_BASE=
+if (( rc == 0 )); then pass "advisory mode passes when there is no base"; else fail "advisory mode passes when there is no base (rc=$rc)"; fi
+
+run targetrequired GT_REQUIRED=true GT_EVENT=pull_request_target
+if (( rc == 1 )) && grep -q 'pull_request_target' "$scratch/targetrequired.log"; then
+  pass "required mode fails under pull_request_target"
+else
+  fail "required mode fails under pull_request_target (rc=$rc)"
+fi
+
+run nobudget GT_REQUIRED=false GT_BUDGET_SECONDS=0
+if (( rc == 0 )) && grep -q -x 'truncated=true' "$scratch/nobudget.out" && grep -q -x 'killed=0' "$scratch/nobudget.out" && grep -q 'No mutation produced a verdict' "$scratch/out/report.md"; then
+  pass "out of time, advisory mode passes, reports the truncation and claims no verdict"
+else
+  fail "out of time, advisory mode passes, reports the truncation and claims no verdict (rc=$rc)"; cat "$scratch/nobudget.log"
+fi
+
+run nobudgetrequired GT_REQUIRED=true GT_BUDGET_SECONDS=0
+if (( rc == 1 )); then pass "out of time, required mode fails"; else fail "out of time, required mode fails (rc=$rc)"; fi
+
+mkdir -p "$scratch/timeout/work" "$scratch/timeout/mutants"
+cp "$fixture/go.mod" "$fixture/guard.go" "$fixture/guard_test.go" "$scratch/timeout/work/"
+awk '/^func CheckSize/ { print "func CheckSize(n int) error {"; print "\tfor {"; print "\t}"; print "}"; skip = 1; next } skip && /^}/ { skip = 0; next } !skip' "$fixture/guard.go" > "$scratch/timeout/mutants/0001.go"
+printf '0001\tguard.go\t.\t1\t1\n' > "$scratch/timeout/shard.tsv"
+GT_TEST_TIMEOUT=3 GT_MUTANTS=$scratch/timeout/mutants bash "$here/worker.sh" "$scratch/timeout/shard.tsv" "$scratch/timeout/work" "$scratch/timeout/verdicts.tsv" > /dev/null
+if [[ $(cat "$scratch/timeout/verdicts.tsv") == $'0001\ttimeout' ]]; then
+  pass "a mutant whose tests time out is reported as timed out, not killed"
+else
+  fail "a mutant whose tests time out is reported as timed out, not killed: $(cat "$scratch/timeout/verdicts.tsv")"
+fi
+
 mkdir -p "$scratch/uncompiled/work" "$scratch/uncompiled/mutants"
 cp "$fixture/go.mod" "$fixture/guard.go" "$fixture/guard_test.go" "$scratch/uncompiled/work/"
 sed 's/return ErrTooLarge/return ErrTooLarge +/' "$fixture/guard.go" > "$scratch/uncompiled/mutants/0001.go"

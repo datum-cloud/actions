@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-awk '
+deletions=${1:-/dev/null}
+awk -v deletions="$deletions" '
 function fail(msg) { print "diff-ranges: " msg > "/dev/stderr"; bad = 1; exit 1 }
 { lines++ }
 /^diff --git / { file = ""; next }
@@ -21,6 +22,7 @@ function fail(msg) { print "diff-ranges: " msg > "/dev/stderr"; bad = 1; exit 1 
   n = split(part[3], span, ",")
   count = (n > 1) ? span[2] + 0 : 1
   if (count > 0 && keep && file != "") printf "%s\t%d\t%d\n", file, span[1], span[1] + count - 1
+  if (count == 0 && keep && file != "") printf "%s\t%d\n", file, span[1] > deletions
   next
 }
 END {

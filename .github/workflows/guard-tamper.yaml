@@ -40,11 +40,11 @@ on:
         type: number
         default: 4
       test-timeout:
-        description: Seconds allowed for one package's tests against one mutant
+        description: Seconds allowed for one package's tests against one mutant. A timeout is reported on its own, never as caught
         type: number
         default: 300
       timeout-minutes:
-        description: Job timeout in minutes
+        description: Job timeout in minutes. No mutant starts in the last 5 minutes, so the job reports a truncated run instead of timing out
         type: number
         default: 20
     outputs:
@@ -58,8 +58,11 @@ on:
         description: Number of mutants a test caught
         value: ${{ jobs.tamper.outputs.killed }}
       truncated:
-        description: "`true` when more mutants were found than `max-mutants` and some were not run"
+        description: "`true` when some mutants were not run, over `max-mutants` or out of time"
         value: ${{ jobs.tamper.outputs.truncated }}
+      timed-out:
+        description: Number of mutants whose tests timed out, counted as neither caught nor surviving
+        value: ${{ jobs.tamper.outputs.timed-out }}
 
 permissions:
   contents: read
@@ -76,6 +79,7 @@ jobs:
       guards: ${{ steps.run.outputs.guards }}
       killed: ${{ steps.run.outputs.killed }}
       truncated: ${{ steps.run.outputs.truncated }}
+      timed-out: ${{ steps.run.outputs.timed-out }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -132,4 +136,6 @@ jobs:
           GT_PRIORITY_REGEXP: ${{ inputs.priority-regexp }}
           GT_PARALLEL: ${{ inputs.parallel }}
           GT_TEST_TIMEOUT: ${{ inputs.test-timeout }}
+          GT_JOB_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+          GT_EVENT: ${{ github.event_name }}
         run: bash "$SCRIPTS/run.sh"
