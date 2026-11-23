@@ -16,6 +16,7 @@ Builds and pushes Docker images to GitHub Container Registry (ghcr.io).
 - `image-name` (required): The image name excluding the registry (e.g., `cloud-portal`)
 - `extra-build-args` (optional): Additional build arguments in multiline string format
 - `drop-distrusted-roots` (optional, default `true`): Builds the Dockerfile to a local OCI layout, then adds a layer from `scripts/drop-distrusted-roots/` that rewrites the image's CA certificate files without the eMudhra emSign C1, C3 and G3 roots, and pushes that. `test-drop-distrusted-roots.yaml` runs the filter tests and the same two builds on a distroless fixture. See [`docs/publish-docker/`](docs/publish-docker/README.md#distrusted-ca-roots).
+- `runner` (optional, default `ubuntu-latest`): Runner label for the job. Point it only at a runner with Docker; on milo-os that is `milo-linux-kind` (being added in https://github.com/datum-cloud/infra/issues/9954).
 - `timeout-minutes` (optional, default `60`): Maximum minutes the build job may run before GitHub cancels it. Normal builds across consumers take 1-23 minutes.
 
 **Automatic Build Arguments:**
@@ -35,6 +36,7 @@ The workflow automatically injects these build arguments:
 Publishes Kustomize bundles to GitHub Container Registry using Flux CLI.
 
 **Inputs:**
+- `runner` (optional, default `ubuntu-latest`): Runner label for the job
 - `bundle-name` (required): Full bundle name including registry (e.g., `ghcr.io/datum-cloud/operator/crds`)
 - `bundle-path` (required): Path to bundle relative to repo root (e.g., `config/crds`)
 
@@ -100,6 +102,10 @@ Validates workflow YAML files using actionlint. Runs automatically on workflow f
 
 Finds and validates all `kustomization.yaml` files in the repository using `kustomize build --enable-helm`.
 
+**Inputs:**
+- `runner` (optional, default `ubuntu-latest`): Runner label for the job
+- `load-restrictor` (optional, default `LoadRestrictionsNone`): `kustomize --load-restrictor` value, matching Flux's kustomize-controller
+
 ### 6. Update Plugin Index (`update-plugin-index/action.yml` — composite action)
 
 Opens a PR against a datumctl plugin catalog (index repo) that bumps a plugin's manifest to a newly published release — setting `spec.version`, rewriting each platform's download `uri` to the new tag, and refreshing each `sha256` from the release's `checksums.txt`. It is a **composite action** (not a reusable workflow) so the caller mints the cross-repo token and runs this in the same job — a GitHub App token doesn't survive being passed across jobs.
@@ -132,6 +138,7 @@ See [`docs/update-notice/`](docs/update-notice/README.md).
 Scans the calling repo for known vulnerabilities and fails on any that aren't explicitly ignored. Callers run it on every pull request and on a weekly schedule. It auto-detects ecosystems: `govulncheck` for each Go module (reachable vulnerabilities only), `osv-scanner` for npm, pnpm, yarn, bun, Python, and Cargo lockfiles, and Trivy for images named in `images`. Logic lives in `scripts/vuln-scan/*.sh`, in Bash with `jq`, plus `scripts/vuln-scan/toml-to-json.py`, the only Python, because nothing else preinstalled on runners parses the caller's `osv-scanner.toml`; the workflow sparse-checks-out only those files (never `testdata/`) at its own commit through `job.workflow_repository` and `job.workflow_sha`, then moves them to `$RUNNER_TEMP` so they're outside the caller's workspace. In a Git work tree it lists files with `git ls-files --cached --others --exclude-standard`, so the caller's `.gitignore` applies; submodules, nested repositories, and manifests without a lockfile are reported as not scanned. Scanner versions are pinned in `scripts/vuln-scan/install-tools.sh` for Renovate.
 
 **Inputs:**
+- `runner` (optional, default `ubuntu-latest`): Runner label for the job
 - `path` (optional, default `.`): Directory to scan
 - `ecosystems` (optional, default `auto`): `auto`, or a list of `go`, `node`, `python`, `rust`; each listed ecosystem must be present
 - `exclude-paths` (optional, default empty): Globs, relative to `path`, not to scan
@@ -162,7 +169,7 @@ Suppressions go only in the ignore file, as `[[Ignore]]` entries with `rule`, on
 
 Builds and tests the calling repo without publishing, for repos with no CI of their own. In `path` it detects Node (npm, pnpm or bun by lockfile; runs `typecheck`, `lint`, `build`, `test` scripts that exist), Go (`go build`, `go test`), Python with Poetry (`poetry install`, `pytest` when test files exist) and a Dockerfile (`docker build`, no push). Logic lives in `scripts/ci-basic/*.sh`, sparse-checked-out at the workflow's own commit like vuln-scan. `test-ci-basic.yaml` runs it on fixtures in `scripts/ci-basic/testdata`; the Node fixture's `lint` script fails on purpose, so a broken `skip` fails the test.
 
-**Inputs:** `path`, `skip` (any of `typecheck`, `lint`, `build`, `test`, `docker`), `run` (extra command), `dockerfile`, `docker-context`, `node-version`, `python-version`. See [`docs/ci-basic/`](docs/ci-basic/README.md).
+**Inputs:** `runner`, `path`, `skip` (any of `typecheck`, `lint`, `build`, `test`, `docker`), `run` (extra command), `dockerfile`, `docker-context`, `node-version`, `python-version`. The Dockerfile build needs a runner with Docker; on milo-os that is `milo-linux-kind` (being added in https://github.com/datum-cloud/infra/issues/9954). See [`docs/ci-basic/`](docs/ci-basic/README.md).
 
 ### 11. Plugin Catalog (`.github/workflows/plugin-catalog-{validate,index,scan,health}.yaml`)
 

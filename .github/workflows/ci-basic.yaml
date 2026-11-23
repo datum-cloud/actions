@@ -3,6 +3,10 @@ name: Basic CI
 on:
   workflow_call:
     inputs:
+      runner:
+        description: Runner label for the job. Point it only at a runner that has the tools the workflow needs; the Dockerfile build needs Docker, which on milo-os means milo-linux-kind.
+        type: string
+        default: ubuntu-latest
       path:
         description: Project directory, relative to the repository root
         type: string
@@ -38,7 +42,7 @@ permissions:
 jobs:
   build:
     name: Build and test
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       contents: read

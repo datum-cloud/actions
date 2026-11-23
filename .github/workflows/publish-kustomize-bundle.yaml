@@ -3,6 +3,10 @@ name: Publish Kustomize Bundle
 on:
   workflow_call:
     inputs:
+      runner:
+        description: Runner label for the job. Point it only at a runner that has the tools the workflow needs.
+        type: string
+        default: ubuntu-latest
       bundle-name:
         required: true
         type: string
@@ -57,7 +61,7 @@ jobs:
       id-token: write
       contents: read
       packages: write
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     outputs:
       tags: ${{ steps.meta.outputs.tags }}
       labels: ${{ steps.meta.outputs.labels }}
