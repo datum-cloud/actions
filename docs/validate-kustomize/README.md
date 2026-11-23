@@ -8,7 +8,7 @@ errors.
 
 ### Inputs
 
-This workflow does not require any inputs.
+- **runner** (optional, default `ubuntu-latest`): Runner label for the job, for callers outside datum-cloud that run on their own runner. A single label only. Needs a runner with the tools the workflow uses.
 
 ### Automatic Triggers
 

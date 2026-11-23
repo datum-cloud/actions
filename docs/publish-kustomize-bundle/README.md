@@ -7,6 +7,7 @@ builds and pushes a Kustomize bundle to **GitHub Container Registry**.
 
 ## Inputs
 
+- **runner** (optional, default `ubuntu-latest`): Runner label for the job, for callers outside datum-cloud that run on their own runner. A single label only. Needs a runner with the tools the workflow uses.
 - **bundle-name**: The full name of the bundle that should be used, including
   the repository (e.g. `ghcr.io/datum-cloud/telemetry-services-operator/crds`).
 - **bundle-path**: The path to the bundle that should be used, relative to the

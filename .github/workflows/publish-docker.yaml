@@ -3,6 +3,10 @@ name: Publish Docker Image
 on:
   workflow_call:
     inputs:
+      runner:
+        description: Runner label for the job. Point it only at a runner with Docker, which the image build needs.
+        type: string
+        default: ubuntu-latest
       image-name:
         required: true
         type: string
@@ -73,7 +77,7 @@ on:
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     outputs:
       tag: ${{ steps.version-tag.outputs.tag }}

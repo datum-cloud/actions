@@ -16,6 +16,7 @@ Builds and pushes Docker images to GitHub Container Registry (ghcr.io).
 - `image-name` (required): The image name excluding the registry (e.g., `cloud-portal`)
 - `extra-build-args` (optional): Additional build arguments in multiline string format
 - `drop-distrusted-roots` (optional, default `true`): Builds the Dockerfile to a local OCI layout, then adds a layer from `scripts/drop-distrusted-roots/` that rewrites the image's CA certificate files without the eMudhra emSign C1, C3 and G3 roots, and pushes that. `test-drop-distrusted-roots.yaml` runs the filter tests and the same two builds on a distroless fixture. See [`docs/publish-docker/`](docs/publish-docker/README.md#distrusted-ca-roots).
+- `runner` (optional, default `ubuntu-latest`): Runner label for the job. Point it only at a runner with Docker.
 - `timeout-minutes` (optional, default `60`): Maximum minutes the build job may run before GitHub cancels it. Normal builds across consumers take 1-23 minutes.
 
 **Automatic Build Arguments:**
@@ -35,6 +36,7 @@ The workflow automatically injects these build arguments:
 Publishes Kustomize bundles to GitHub Container Registry using Flux CLI.
 
 **Inputs:**
+- `runner` (optional, default `ubuntu-latest`): Runner label for the job
 - `bundle-name` (required): Full bundle name including registry (e.g., `ghcr.io/datum-cloud/operator/crds`)
 - `bundle-path` (required): Path to bundle relative to repo root (e.g., `config/crds`)
 
@@ -162,7 +164,7 @@ Suppressions go only in the ignore file, as `[[Ignore]]` entries with `rule`, on
 
 Builds and tests the calling repo without publishing, for repos with no CI of their own. In `path` it detects Node (npm, pnpm or bun by lockfile; runs `typecheck`, `lint`, `build`, `test` scripts that exist), Go (`go build`, `go test`), Python with Poetry (`poetry install`, `pytest` when test files exist) and a Dockerfile (`docker build`, no push). Logic lives in `scripts/ci-basic/*.sh`, sparse-checked-out at the workflow's own commit like vuln-scan. `test-ci-basic.yaml` runs it on fixtures in `scripts/ci-basic/testdata`; the Node fixture's `lint` script fails on purpose, so a broken `skip` fails the test.
 
-**Inputs:** `path`, `skip` (any of `typecheck`, `lint`, `build`, `test`, `docker`), `run` (extra command), `dockerfile`, `docker-context`, `node-version`, `python-version`. See [`docs/ci-basic/`](docs/ci-basic/README.md).
+**Inputs:** `runner`, `path`, `skip` (any of `typecheck`, `lint`, `build`, `test`, `docker`), `run` (extra command), `dockerfile`, `docker-context`, `node-version`, `python-version`. See [`docs/ci-basic/`](docs/ci-basic/README.md).
 
 ### 11. Plugin Catalog (`.github/workflows/plugin-catalog-{validate,index,scan,health}.yaml`)
 

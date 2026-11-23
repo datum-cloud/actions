@@ -42,6 +42,7 @@ listed. Commit a lockfile, or add a manifest without dependencies to
 
 | Input | Default | Description |
 |---|---|---|
+| `runner` | `ubuntu-latest` | Runner label for the job, for callers outside datum-cloud that run on their own runner. A single label only. Needs a runner with the tools the workflow uses. |
 | `path` | `.` | Directory to scan, relative to the repository root. |
 | `ecosystems` | `auto` | `auto` scans every ecosystem found. A comma-separated list, such as `go,node`, scans only those ecosystems and fails if one of them has no dependency files. |
 | `exclude-paths` | None | Comma- or newline-separated globs, relative to `path`, of files or directories not to scan, such as `examples/*`. |

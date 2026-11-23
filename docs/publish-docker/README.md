@@ -7,6 +7,7 @@ pushes a Docker image to **GitHub Container Registry**.
 
 ### Inputs
 
+- **runner** (optional, default `ubuntu-latest`): Runner label for the job, for callers outside datum-cloud that run on their own runner. A single label only. Point it only at a runner with Docker, which the buildx build needs.
 - **image-name** (required): The name of the docker image (without the registry) that
   should be used (e.g. cloud-portal).
 - **registry-organization** (optional): The GitHub organization used in the container

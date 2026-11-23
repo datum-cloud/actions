@@ -27,6 +27,7 @@ apply only when those files are missing.
 
 | Input | Default | Description |
 |---|---|---|
+| `runner` | `ubuntu-latest` | Runner label for the job, for callers outside datum-cloud that run on their own runner. A single label only. Needs a runner with the tools the workflow uses. |
 | `path` | `.` | Project directory, relative to the repository root. |
 | `skip` | None | Comma- or space-separated steps not to run: `typecheck`, `lint`, `build`, `test`, `docker`. An unknown name fails the job. For Go, `build` and `test` name the two `go` commands; for Python, `build` is `poetry install`. |
 | `run` | None | Extra shell command, run in `path` after the detected steps, such as `node --check main.mjs`. |
