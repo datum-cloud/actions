@@ -44,7 +44,7 @@ on:
         type: number
         default: 300
       timeout-minutes:
-        description: Job timeout in minutes. No mutant starts in the last 5 minutes, so the job reports a truncated run instead of timing out
+        description: Job timeout in minutes. Counted from the first step. No mutant starts, and no build or test runs, in the last 5 minutes, so the job reports a truncated run instead of timing out
         type: number
         default: 20
     outputs:
@@ -63,6 +63,9 @@ on:
       timed-out:
         description: Number of mutants whose tests timed out, counted as neither caught nor surviving
         value: ${{ jobs.tamper.outputs.timed-out }}
+      flaky-guards:
+        description: Newline-separated `file:line` of each guard a test caught on one run and missed on a re-run
+        value: ${{ jobs.tamper.outputs.flaky-guards }}
 
 permissions:
   contents: read
@@ -80,7 +83,11 @@ jobs:
       killed: ${{ steps.run.outputs.killed }}
       truncated: ${{ steps.run.outputs.truncated }}
       timed-out: ${{ steps.run.outputs.timed-out }}
+      flaky-guards: ${{ steps.run.outputs.flaky-guards }}
     steps:
+      - name: Record job start
+        run: echo "GT_JOB_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-started=$(date +%s)
+started=${GT_JOB_STARTED:-$(date +%s)}
 scripts=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 module=${GT_PATH:-.}
 required=${GT_REQUIRED:-false}
@@ -27,7 +27,7 @@ fi
 
 write_outputs_empty() {
   if [[ -n ${GITHUB_OUTPUT:-} ]]; then
-    printf 'survivors=0\nsurviving-mutants=0\nkilled=0\nuncompiled=0\ntruncated=false\nskipped-mutants=0\ntimed-out=0\nflaky=0\nguards=\n' >> "$GITHUB_OUTPUT"
+    printf 'survivors=0\nsurviving-mutants=0\nkilled=0\nuncompiled=0\ntruncated=false\nskipped-mutants=0\ntimed-out=0\nflaky=0\nguards=\nflaky-guards=\n' >> "$GITHUB_OUTPUT"
   fi
 }
 

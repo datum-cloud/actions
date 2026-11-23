@@ -34,8 +34,10 @@ For each mutant on a changed line:
 4. The package's tests run. Passing tests mean the mutant survived. A
    failing test kills it. A killed mutant whose run took under a minute runs
    once more, and if it then passes it is reported as flaky. A run that hits
-   `test-timeout` is reported as timed out. Flaky and timed-out mutants count
-   as neither caught nor surviving.
+   `test-timeout` is reported as timed out, never as caught.
+
+A flaky mutant is one no test catches reliably. Flaky guards are listed next
+to surviving guards, get their own annotation, and fail required mode.
 
 The verdict comes from surviving mutants only. Survivors are grouped by the
 enclosing `if`, `case` or function, so one guard gives one annotation.
@@ -108,7 +110,7 @@ jobs:
 | `priority-regexp` | Authorization, tenancy, limit and race terms | Case-insensitive extended regular expression. When truncated, guards whose line or removed code matches run first. |
 | `parallel` | `4` | Mutants tested at once, each in its own copy of the repository. |
 | `test-timeout` | `300` | Seconds for one package's tests against one mutant. A timeout is reported as timed out, never as caught. |
-| `timeout-minutes` | `20` | Job timeout. No mutant starts in the last 5 minutes, and no test runs past that point, so a long run is reported as truncated instead of timing out. |
+| `timeout-minutes` | `20` | Job timeout, counted from the job's first step. No mutant starts, and no build or test runs past the last 5 minutes, so a long run is reported as truncated instead of timing out. |
 
 ## Outputs
 
@@ -119,6 +121,7 @@ jobs:
 | `killed` | Mutants a test caught. |
 | `truncated` | `true` when some mutants were not run, over `max-mutants` or out of time. |
 | `timed-out` | Mutants whose tests timed out. |
+| `flaky-guards` | Newline-separated `file:line` of each guard a test caught once and missed on a re-run. |
 
 ## Cost
 

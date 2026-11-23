@@ -48,23 +48,32 @@ while IFS=$'\t' read -r id file pkg _ _; do
   target=$work/$file
   cp "$target" "$saved"
   cp "$GT_MUTANTS/$id.go" "$target"
-  if ! go test -count=1 -run '^$' "${flags[@]}" "$pkg" > "$log" 2>&1; then
+  rc=0
+  timeout "${limit}s" go test -count=1 -run '^$' "${flags[@]}" "$pkg" > "$log" 2>&1 || rc=$?
+  if (( rc == 124 )); then
+    verdict=unrun
+  elif (( rc != 0 )); then
     verdict=uncompiled
   else
     started=$(date +%s)
-    case $(run_tests "$limit") in
-      pass) verdict=survived ;;
-      timeout) verdict=timeout ;;
-      uncompiled) verdict=uncompiled ;;
-      fail)
-        verdict=killed
-        took=$(( $(date +%s) - started ))
-        limit=$(remaining)
-        if (( took < rerun_under && limit >= took + 5 )) && [[ $(run_tests "$limit") == pass ]]; then
-          verdict=flaky
-        fi
-        ;;
-    esac
+    limit=$(remaining)
+    if [[ -n $deadline ]] && (( limit < 5 )); then
+      verdict=unrun
+    else
+      case $(run_tests "$limit") in
+        pass) verdict=survived ;;
+        timeout) verdict=timeout ;;
+        uncompiled) verdict=uncompiled ;;
+        fail)
+          verdict=killed
+          took=$(( $(date +%s) - started ))
+          limit=$(remaining)
+          if (( took < rerun_under && limit >= took + 5 )) && [[ $(run_tests "$limit") == pass ]]; then
+            verdict=flaky
+          fi
+          ;;
+      esac
+    fi
   fi
   cp "$saved" "$target"
   target=""

@@ -160,6 +160,13 @@ else
   fail "out of time, advisory mode passes, reports the truncation and claims no verdict (rc=$rc)"; cat "$scratch/nobudget.log"
 fi
 
+run jobstart GT_REQUIRED=false GT_JOB_STARTED=$(( $(date +%s) - 3600 )) GT_JOB_TIMEOUT_MINUTES=20
+if (( rc == 0 )) && grep -q -x 'truncated=true' "$scratch/jobstart.out" && grep -q -x 'killed=0' "$scratch/jobstart.out"; then
+  pass "the time budget counts from the job start"
+else
+  fail "the time budget counts from the job start (rc=$rc)"
+fi
+
 run nobudgetrequired GT_REQUIRED=true GT_BUDGET_SECONDS=0
 if (( rc == 1 )); then pass "out of time, required mode fails"; else fail "out of time, required mode fails (rc=$rc)"; fi
 
@@ -172,6 +179,47 @@ if [[ $(cat "$scratch/timeout/verdicts.tsv") == $'0001\ttimeout' ]]; then
   pass "a mutant whose tests time out is reported as timed out, not killed"
 else
   fail "a mutant whose tests time out is reported as timed out, not killed: $(cat "$scratch/timeout/verdicts.tsv")"
+fi
+
+mkdir -p "$scratch/flaky/work" "$scratch/flaky/mutants" "$scratch/flaky/out"
+cp "$fixture/go.mod" "$fixture/guard.go" "$fixture/guard_test.go" "$scratch/flaky/work/"
+cat > "$scratch/flaky/work/flaky_test.go" <<'GO'
+package guardfixture
+
+import (
+	"os"
+	"testing"
+)
+
+func TestFailsOnlyOnTheFirstRun(t *testing.T) {
+	mark := os.Getenv("GT_FLAKY_MARK")
+	if mark == "" {
+		return
+	}
+	if _, err := os.Stat(mark); err == nil {
+		return
+	}
+	if err := os.WriteFile(mark, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Fatal("fails on the first run only")
+}
+GO
+cp "$fixture/guard.go" "$scratch/flaky/mutants/0001.go"
+printf '0001\tguard.go\t.\t%s\t%s\n' "$((unguarded + 1))" "$((unguarded + 1))" > "$scratch/flaky/shard.tsv"
+GT_FLAKY_MARK=$scratch/flaky/mark GT_MUTANTS=$scratch/flaky/mutants bash "$here/worker.sh" "$scratch/flaky/shard.tsv" "$scratch/flaky/work" "$scratch/flaky/verdicts.tsv" > /dev/null
+if [[ $(cat "$scratch/flaky/verdicts.tsv") == $'0001\tflaky' ]]; then
+  pass "a mutant that fails once and passes on a re-run is flaky, not killed"
+else
+  fail "a mutant that fails once and passes on a re-run is flaky, not killed: $(cat "$scratch/flaky/verdicts.tsv")"
+fi
+printf '< \t\treturn ErrTooLarge\n> \t\t_ = ErrTooLarge\n' > "$scratch/flaky/out/0001.diff"
+rc=0
+GT_REQUIRED=true GT_TOTAL_MUTANTS=1 bash "$here/report.sh" "$scratch/flaky/shard.tsv" "$scratch/flaky/verdicts.tsv" "$fixture" "$scratch/flaky/out" "" > "$scratch/flaky/report.log" 2>&1 || rc=$?
+if (( rc == 1 )) && grep -q '^## Flaky' "$scratch/flaky/out/report.md" && grep -q "guard.go:$unguarded" "$scratch/flaky/out/report.md"; then
+  pass "required mode fails on a flaky guard and the report lists it"
+else
+  fail "required mode fails on a flaky guard and the report lists it (rc=$rc)"; cat "$scratch/flaky/report.log"
 fi
 
 mkdir -p "$scratch/uncompiled/work" "$scratch/uncompiled/mutants"
