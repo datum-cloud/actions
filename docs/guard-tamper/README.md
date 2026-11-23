@@ -31,8 +31,11 @@ For each mutant on a changed line:
    `ignore-regexp` replaces that pattern.
 3. The package and its tests are built. A mutant that doesn't compile is
    excluded, not counted as caught.
-4. The package's tests run. A failing test kills the mutant. Passing tests
-   mean it survived.
+4. The package's tests run. Passing tests mean the mutant survived. A
+   failing test kills it. A killed mutant whose run took under a minute runs
+   once more, and if it then passes it is reported as flaky. A run that hits
+   `test-timeout` is reported as timed out. Flaky and timed-out mutants count
+   as neither caught nor surviving.
 
 The verdict comes from surviving mutants only. Survivors are grouped by the
 enclosing `if`, `case` or function, so one guard gives one annotation.
@@ -41,7 +44,31 @@ Before any mutant runs, the package's tests must pass unchanged. If they
 fail, the job fails, because no verdict is possible.
 
 Test files, files with a `Code generated ... DO NOT EDIT.` header, and files
-under `testdata` or `vendor` are never mutated.
+under `testdata` or `vendor` are never mutated. A hunk that only deletes lines
+has nothing to mutate, so a pull request that removes a guard is not checked
+here. The summary counts those hunks.
+
+When no mutation finishes with a caught or surviving verdict, the summary
+says the run tells nothing about the tests and the job warns. In required
+mode it fails.
+
+## Events and trust
+
+Call it on `pull_request` only. With no base commit, on `push` or
+`workflow_dispatch` without `base`, there is no diff. Under
+`pull_request_target` the checkout is the base branch, so there is no diff
+either. Advisory mode passes with a notice in both cases. Required mode
+fails.
+
+Never call it from `pull_request_target` with a checkout of the fork's head.
+The job builds and runs the pull request's code and tests, and
+`pull_request_target` gives that code the base repository's token and
+secrets.
+
+The check is advisory grade even in required mode. The pull request's own
+code and tests run in the same job that decides the verdict, so a pull
+request can change what the check sees. It catches untested guards written in
+good faith. It is not a security boundary.
 
 ## Usage
 
@@ -80,8 +107,8 @@ jobs:
 | `max-mutants` | `60` | Most mutants to run. Over this, the run is truncated. See [Large pull requests](#large-pull-requests). |
 | `priority-regexp` | Authorization, tenancy, limit and race terms | Case-insensitive extended regular expression. When truncated, guards whose line or removed code matches run first. |
 | `parallel` | `4` | Mutants tested at once, each in its own copy of the repository. |
-| `test-timeout` | `300` | Seconds for one package's tests against one mutant. A timeout counts as caught. |
-| `timeout-minutes` | `20` | Job timeout. |
+| `test-timeout` | `300` | Seconds for one package's tests against one mutant. A timeout is reported as timed out, never as caught. |
+| `timeout-minutes` | `20` | Job timeout. No mutant starts in the last 5 minutes, and no test runs past that point, so a long run is reported as truncated instead of timing out. |
 
 ## Outputs
 
@@ -90,7 +117,8 @@ jobs:
 | `survivors` | Guards with at least one surviving mutant. |
 | `guards` | Newline-separated `file:line` of each surviving guard. |
 | `killed` | Mutants a test caught. |
-| `truncated` | `true` when some mutants were not run because of `max-mutants`. |
+| `truncated` | `true` when some mutants were not run, over `max-mutants` or out of time. |
+| `timed-out` | Mutants whose tests timed out. |
 
 ## Cost
 
@@ -101,7 +129,8 @@ time.
 ## Large pull requests
 
 A large feature pull request finds far more mutants than the default cap: the
-change that added server-side apply to netbox-provider finds 400. Over
+change that added server-side apply to netbox-provider,
+datum-labs/netbox-provider#5, finds 400. Over
 `max-mutants`, the job runs that many and skips the rest:
 
 1. Guards whose line or removed code matches `priority-regexp` run first,
@@ -109,10 +138,19 @@ change that added server-side apply to netbox-provider finds 400. Over
 2. Within that order, each guard gets one mutant before any guard gets a
    second.
 
+The time budget truncates the same way: mutants not started before the last
+5 minutes of `timeout-minutes` are not run.
+
 The truncation is never silent. The summary lists every guard left unchecked,
 the job adds a warning annotation, and the `truncated` output is `true`. When
-`required` is `true`, a truncated run fails. Raise `max-mutants` or split the
-pull request.
+`required` is `true`, a truncated run fails. Raise `max-mutants` or
+`timeout-minutes`, or split the pull request.
+
+The default `priority-regexp` matches authorization, authentication,
+permission, tenancy, impersonation, caller, signature, `resourceVersion`,
+quota, conflict, race, lease and epoch terms. A capped run can still miss a
+gap: capped at 5 on datum-labs/netbox-provider#5's size checks, it skipped
+the one surviving mutant, because the first mutant of that guard was caught.
 
 ## Report
 
