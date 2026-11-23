@@ -1,0 +1,181 @@
+# Guard tamper
+
+The `.github/workflows/guard-tamper.yaml` reusable workflow finds guards that
+no test protects. On a pull request, it removes or weakens each guard on the
+Go lines the pull request changed, one at a time, and runs that package's
+tests. A guard whose removal every test survives is reported, with the line
+and the change that survived.
+
+It catches the review finding "this check can be deleted and every test still
+passes" before review, for checks such as authorization, tenancy, size caps
+and race guards.
+
+## What it changes
+
+The workflow runs [go-mutesting](https://github.com/avito-tech/go-mutesting)
+with its removal mutators only:
+
+| Mutator | Change |
+|---|---|
+| `branch/if`, `branch/else`, `branch/case` | Empty an `if`, `else` or `case` body |
+| `expression/remove` | Drop one clause of a `&&` or `\|\|` condition |
+| `statement/remove` | Delete one statement |
+
+Operator flips, arithmetic and loop mutators are off: they break unrelated
+code and get caught for the wrong reason.
+
+For each mutant on a changed line:
+
+1. A mutant outside the pull request's changed lines is skipped.
+2. A mutant whose only change removes a logger call or an Event is skipped.
+   `ignore-regexp` replaces that pattern.
+3. The package and its tests are built. A mutant that doesn't compile is
+   excluded, not counted as caught.
+4. The package's tests run. Passing tests mean the mutant survived. A
+   failing test kills it. A killed mutant whose run took under a minute runs
+   once more, and if it then passes it is reported as flaky. A run that hits
+   `test-timeout` is reported as timed out, never as caught.
+
+A flaky mutant is one no test catches reliably. Flaky guards are listed next
+to surviving guards, get their own annotation, and fail required mode.
+
+The verdict comes from surviving mutants only. Survivors are grouped by the
+enclosing `if`, `case` or function, so one guard gives one annotation.
+
+Before any mutant runs, the package's tests must pass unchanged. If they
+fail, the job fails, because no verdict is possible.
+
+Test files, files with a `Code generated ... DO NOT EDIT.` header, and files
+under `testdata` or `vendor` are never mutated. A hunk that only deletes lines
+has nothing to mutate, so a pull request that removes a guard is not checked
+here. The summary counts those hunks.
+
+When no mutation finishes with a caught or surviving verdict, the summary
+says the run tells nothing about the tests and the job warns. In required
+mode it fails.
+
+## Events and trust
+
+Call it on `pull_request` only. With no base commit, on `push` or
+`workflow_dispatch` without `base`, there is no diff. Under
+`pull_request_target` the checkout is the base branch, so there is no diff
+either. Advisory mode passes with a notice in both cases. Required mode
+fails.
+
+Never call it from `pull_request_target` with a checkout of the fork's head.
+The job builds and runs the pull request's code and tests, and
+`pull_request_target` gives that code the base repository's token and
+secrets.
+
+The check is advisory grade even in required mode. The pull request's own
+code and tests run in the same job that decides the verdict, so a pull
+request can change what the check sees. It catches untested guards written in
+good faith. It is not a security boundary.
+
+## Usage
+
+```yaml
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  guard-tamper:
+    uses: datum-cloud/actions/.github/workflows/guard-tamper.yaml@v1.31.0
+```
+
+A package whose tests need envtest:
+
+```yaml
+jobs:
+  guard-tamper:
+    uses: datum-cloud/actions/.github/workflows/guard-tamper.yaml@v1.31.0
+    with:
+      env-setup: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@32759fab31191897ae86091d8831b2d4b890aedd && echo "KUBEBUILDER_ASSETS=$("$(go env GOPATH)/bin/setup-envtest" use 1.31.0 -p path)" >> "$GITHUB_ENV"
+```
+
+## Inputs
+
+| Input | Default | Description |
+|---|---|---|
+| `path` | `.` | Go module directory, relative to the repository root. |
+| `required` | `false` | Fail the job when a guard survives. When `false`, survivors are reported and annotated and the job passes. |
+| `base` | Pull request base | Commit or tree to diff against. |
+| `env-setup` | None | One shell command run in `path` before testing. Write variables to `$GITHUB_ENV`. |
+| `go-test-flags` | None | Extra flags for every `go test`, such as `-tags=integration`. |
+| `ignore-regexp` | Logger and Event calls | Extended regular expression. A statement removal whose first removed line matches is skipped. |
+| `max-mutants` | `60` | Most mutants to run. Over this, the run is truncated. See [Large pull requests](#large-pull-requests). |
+| `priority-regexp` | Authorization, tenancy, limit and race terms | Case-insensitive extended regular expression. When truncated, guards whose line or removed code matches run first. |
+| `parallel` | `4` | Mutants tested at once, each in its own copy of the repository. |
+| `test-timeout` | `300` | Seconds for one package's tests against one mutant. A timeout is reported as timed out, never as caught. |
+| `timeout-minutes` | `20` | Job timeout, counted from the job's first step. No mutant starts, and no build or test runs past the last 5 minutes, so a long run is reported as truncated instead of timing out. |
+
+## Outputs
+
+| Output | Description |
+|---|---|
+| `survivors` | Guards with at least one surviving mutant. |
+| `guards` | Newline-separated `file:line` of each surviving guard. |
+| `killed` | Mutants a test caught. |
+| `truncated` | `true` when some mutants were not run, over `max-mutants` or out of time. |
+| `timed-out` | Mutants whose tests timed out. |
+| `flaky-guards` | Newline-separated `file:line` of each guard a test caught once and missed on a re-run. |
+
+## Cost
+
+Finding the mutants type-checks each changed file, about 20 seconds a file
+on a laptop. Then each mutant runs its package's tests once, `parallel` at a
+time.
+
+## Large pull requests
+
+A large feature pull request finds far more mutants than the default cap: the
+change that added server-side apply to netbox-provider,
+datum-labs/netbox-provider#5, finds 400. Over
+`max-mutants`, the job runs that many and skips the rest:
+
+1. Guards whose line or removed code matches `priority-regexp` run first,
+   then guards in a file whose path matches, then the rest.
+2. Within that order, each guard gets one mutant before any guard gets a
+   second.
+
+The time budget truncates the same way: mutants not started before the last
+5 minutes of `timeout-minutes` are not run.
+
+The truncation is never silent. The summary lists every guard left unchecked,
+the job adds a warning annotation, and the `truncated` output is `true`. When
+`required` is `true`, a truncated run fails. Raise `max-mutants` or
+`timeout-minutes`, or split the pull request.
+
+The default `priority-regexp` matches authorization, authentication,
+permission, tenancy, impersonation, caller, signature, `resourceVersion`,
+quota, conflict, race, lease and epoch terms. A capped run can still miss a
+gap: capped at 5 on datum-labs/netbox-provider#5's size checks, it skipped
+the one surviving mutant, because the first mutant of that guard was caught.
+
+## Report
+
+The report is written to `$RUNNER_TEMP/guard-tamper/report.md`, outside the
+checkout, and added to the job summary. Each surviving guard is a warning
+annotation on its line, or an error when `required` is `true`.
+
+## Run locally
+
+```sh
+bash scripts/guard-tamper/install.sh
+PATH="${TMPDIR:-/tmp}/guard-tamper-bin:$PATH" \
+  GT_PATH=. GT_BASE=origin/main GT_REPORT_DIR="${TMPDIR:-/tmp}/guard-tamper" \
+  bash scripts/guard-tamper/run.sh
+```
+
+`GT_RANGES_FILE` takes a tab-separated list of file, first line and last line in place of
+the diff, to check chosen lines.
+
+## Tests
+
+`scripts/guard-tamper/test-guard-tamper.sh` runs against a fixture package
+with one guard its tests catch and one they don't, and asserts that only the
+second is reported. `.github/workflows/test-guard-tamper.yaml` runs it and the
+reusable workflow end to end.

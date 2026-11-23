@@ -24,6 +24,7 @@ available for use across the organization.
 - [**Code Scan**](./code-scan/) - Scan source for injected code, such as process execution, dynamic code execution, and downloads piped into a shell, and fail on any finding that the central ignore file doesn't cover
 - [**Lockfile Check**](./lockfile-check/) - Fail when an npm, pnpm, or Yarn lockfile resolves a package from anywhere other than an approved registry, such as a tarball URL, a git source, or a path outside the repository
 - [**Vulnerability Scan**](./vuln-scan/) - Scan Go modules, lockfiles, and container images for known vulnerabilities on every pull request and weekly, and fail on any that aren't explicitly ignored
+- [**Guard Tamper**](./guard-tamper/) - Remove or weaken each guard a pull request changes and report the ones no test catches
 
 ## Usage
 

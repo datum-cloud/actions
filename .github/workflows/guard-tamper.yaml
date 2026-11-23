@@ -1,0 +1,148 @@
+name: Guard Tamper
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Go module directory, relative to the repository root
+        type: string
+        default: "."
+      required:
+        description: Fail the job when a guard on the changed lines survives tampering. When false, survivors are reported and annotated and the job passes
+        type: boolean
+        default: false
+      base:
+        description: Commit or tree to diff against. Empty uses the pull request's base commit
+        type: string
+        default: ""
+      env-setup:
+        description: One shell command run in `path` before testing, such as installing envtest assets and writing KUBEBUILDER_ASSETS to GITHUB_ENV
+        type: string
+        default: ""
+      go-test-flags:
+        description: Extra flags for every `go test`, such as `-tags=integration`
+        type: string
+        default: ""
+      ignore-regexp:
+        description: Extended regular expression for statements whose removal is never reported. Empty uses the default logger and Event recorder pattern
+        type: string
+        default: ""
+      max-mutants:
+        description: Most mutants to run. Over this, the job runs this many, guards matching `priority-regexp` first and one mutant per guard before a second, and reports the truncation. A truncated run fails when `required` is true
+        type: number
+        default: 60
+      priority-regexp:
+        description: Case-insensitive extended regular expression for guards to run first when over `max-mutants`. Empty uses the default authorization, tenancy, limit and race pattern
+        type: string
+        default: ""
+      parallel:
+        description: Mutants tested at once, each in its own copy of the repository
+        type: number
+        default: 4
+      test-timeout:
+        description: Seconds allowed for one package's tests against one mutant. A timeout is reported on its own, never as caught
+        type: number
+        default: 300
+      timeout-minutes:
+        description: Job timeout in minutes. Counted from the first step. No mutant starts, and no build or test runs, in the last 5 minutes, so the job reports a truncated run instead of timing out
+        type: number
+        default: 20
+    outputs:
+      survivors:
+        description: Number of guards with at least one surviving mutant
+        value: ${{ jobs.tamper.outputs.survivors }}
+      guards:
+        description: Newline-separated `file:line` of each surviving guard
+        value: ${{ jobs.tamper.outputs.guards }}
+      killed:
+        description: Number of mutants a test caught
+        value: ${{ jobs.tamper.outputs.killed }}
+      truncated:
+        description: "`true` when some mutants were not run, over `max-mutants` or out of time"
+        value: ${{ jobs.tamper.outputs.truncated }}
+      timed-out:
+        description: Number of mutants whose tests timed out, counted as neither caught nor surviving
+        value: ${{ jobs.tamper.outputs.timed-out }}
+      flaky-guards:
+        description: Newline-separated `file:line` of each guard a test caught on one run and missed on a re-run
+        value: ${{ jobs.tamper.outputs.flaky-guards }}
+
+permissions:
+  contents: read
+
+jobs:
+  tamper:
+    name: Tamper with changed guards
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    outputs:
+      survivors: ${{ steps.run.outputs.survivors }}
+      guards: ${{ steps.run.outputs.guards }}
+      killed: ${{ steps.run.outputs.killed }}
+      truncated: ${{ steps.run.outputs.truncated }}
+      timed-out: ${{ steps.run.outputs.timed-out }}
+      flaky-guards: ${{ steps.run.outputs.flaky-guards }}
+    steps:
+      - name: Record job start
+        run: echo "GT_JOB_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: test -n "$WORKFLOW_REPOSITORY" && test -n "$WORKFLOW_SHA" && echo "Scripts from $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
+
+      - name: Checkout guard tamper scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .guard-tamper-action
+          sparse-checkout: |
+            /scripts/guard-tamper/*.sh
+            /scripts/guard-tamper/*.awk
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Move scripts out of the workspace
+        run: mv "$GITHUB_WORKSPACE/.guard-tamper-action" "$RUNNER_TEMP/guard-tamper-action" && echo "SCRIPTS=$RUNNER_TEMP/guard-tamper-action/scripts/guard-tamper" >> "$GITHUB_ENV"
+
+      - name: Install Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ${{ inputs.path }}/go.mod
+          cache-dependency-path: ${{ inputs.path }}/go.sum
+
+      - name: Install go-mutesting
+        run: bash "$SCRIPTS/install.sh"
+
+      - name: Set up test environment
+        if: inputs.env-setup != ''
+        working-directory: ${{ inputs.path }}
+        env:
+          ENV_SETUP: ${{ inputs.env-setup }}
+        run: bash -c "$ENV_SETUP"
+
+      - name: Tamper with changed guards
+        id: run
+        env:
+          GT_PATH: ${{ inputs.path }}
+          GT_BASE: ${{ inputs.base || github.event.pull_request.base.sha }}
+          GT_REQUIRED: ${{ inputs.required }}
+          GT_GO_TEST_FLAGS: ${{ inputs.go-test-flags }}
+          GT_IGNORE_REGEXP: ${{ inputs.ignore-regexp }}
+          GT_MAX_MUTANTS: ${{ inputs.max-mutants }}
+          GT_PRIORITY_REGEXP: ${{ inputs.priority-regexp }}
+          GT_PARALLEL: ${{ inputs.parallel }}
+          GT_TEST_TIMEOUT: ${{ inputs.test-timeout }}
+          GT_JOB_TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+          GT_EVENT: ${{ github.event_name }}
+        run: bash "$SCRIPTS/run.sh"

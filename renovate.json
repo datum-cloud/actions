@@ -9,7 +9,8 @@
     "scripts/vuln-scan/testdata/**",
     "scripts/code-scan/testdata/**",
     "scripts/lockfile-check/testdata/**",
-    "scripts/activity-policies/testdata/**"
+    "scripts/activity-policies/testdata/**",
+    "scripts/guard-tamper/testdata/**"
   ],
   "customManagers": [
     {
@@ -53,6 +54,16 @@
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n  ACTIVITYTOOL_VERSION: (?<currentValue>[^@\\s]+)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
       ],
       "autoReplaceStringTemplate": "# renovate: datasource={{{datasource}}} depName={{{depName}}}\n  ACTIVITYTOOL_VERSION: {{{newValue}}}{{#if newDigest}}@{{{newDigest}}}{{/if}}"
+    },
+    {
+      "customType": "regex",
+      "description": "go-mutesting commit pinned in the guard tamper installer",
+      "managerFilePatterns": [
+        "/^scripts/guard-tamper/install\\.sh$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+) branch=(?<currentValue>\\S+)\\n[A-Z_]+_VERSION=(?<currentDigest>[a-f0-9]{40})"
+      ]
     }
   ],
   "pip-compile": {
