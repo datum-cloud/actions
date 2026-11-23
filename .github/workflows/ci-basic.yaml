@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       runner:
-        description: Runner label for the job. Point it only at a runner that has the tools the workflow needs.
+        description: Runner label for the job. Point it only at a runner that has the tools the workflow needs; the Dockerfile build needs Docker, which on milo-os means milo-linux-kind.
         type: string
         default: ubuntu-latest
       path:

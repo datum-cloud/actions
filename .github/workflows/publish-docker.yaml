@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       runner:
-        description: Runner label for the job. Point it only at a runner with Docker, which the image build needs.
+        description: Runner label for the job. Point it only at a runner with Docker, which the image build needs; on milo-os use milo-linux-kind.
         type: string
         default: ubuntu-latest
       image-name:
