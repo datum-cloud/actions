@@ -38,3 +38,4 @@ jobs:
     uses: ./.github/workflows/pnpm-policy.yaml
     with:
       path: scripts/ci-basic/testdata/node-pnpm
+      require-lockfile: true

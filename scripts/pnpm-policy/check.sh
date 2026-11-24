@@ -6,6 +6,7 @@ set -euo pipefail
 SCAN_PATH=${SCAN_PATH:-.}
 PNPM_MAJOR=${PNPM_MAJOR:-12}
 REQUIRE_PNPM=${REQUIRE_PNPM:-false}
+REQUIRE_LOCKFILE=${REQUIRE_LOCKFILE:-false}
 YQ=${YQ:-yq}
 
 violations=0
@@ -32,6 +33,7 @@ warn() {
 [[ -d $SCAN_PATH ]] || fail_config "path '$SCAN_PATH' is not a directory"
 [[ $PNPM_MAJOR =~ ^[0-9]+$ ]] || fail_config "pnpm-major must be a whole number, got '$PNPM_MAJOR'"
 [[ $REQUIRE_PNPM == true || $REQUIRE_PNPM == false ]] || fail_config "require-pnpm must be true or false, got '$REQUIRE_PNPM'"
+[[ $REQUIRE_LOCKFILE == true || $REQUIRE_LOCKFILE == false ]] || fail_config "require-lockfile must be true or false, got '$REQUIRE_LOCKFILE'"
 
 yq_out=$("$YQ" --version 2>&1) || fail_config "yq not found; mikefarah yq v4 is required to read pnpm-workspace.yaml"
 [[ $yq_out == *github.com/mikefarah/yq*version\ v4.* ]] || fail_config "yq must be mikefarah yq v4, found: $(printf '%s' "$yq_out" | head -c 100)"
@@ -91,12 +93,19 @@ for lock in ${lockfiles[@]+"${lockfiles[@]}"}; do
   trust=$(yaml_get "$ws" .trustPolicy)
   [[ $trust == no-downgrade ]] || violation "$(rel pnpm-workspace.yaml)" "trustPolicy is '${trust:-unset}'; set it to no-downgrade"
 
+  builds_tag=$("$YQ" '.allowBuilds | tag' "$ws")
+  if [[ $builds_tag != '!!null' && $builds_tag != '!!map' ]]; then
+    violation "$(rel pnpm-workspace.yaml)" "allowBuilds must map each package name to true or false"
+  fi
   [[ $(yaml_get "$ws" .dangerouslyAllowAllBuilds) != true ]] || violation "$(rel pnpm-workspace.yaml)" "dangerouslyAllowAllBuilds lets every dependency run install scripts; list them in allowBuilds instead"
   [[ $(yaml_get "$ws" '(.allowBuilds // {}) | to_entries | map(select(.key | test("^[*]$"))) | .[0].value') != true ]] || violation "$(rel pnpm-workspace.yaml)" "allowBuilds allows every package; name each one"
 
   [[ -z $(yaml_get "$ws" .onlyBuiltDependencies) ]] || warn "$(rel pnpm-workspace.yaml)" "onlyBuiltDependencies is the old name; move its entries to allowBuilds"
 done
 
+if [[ $checked -eq 0 && $REQUIRE_LOCKFILE == true ]]; then
+  fail_config "no pnpm-lock.yaml under '$SCAN_PATH', and require-lockfile is on"
+fi
 if [[ $checked -eq 0 && ${#others[@]} -eq 0 ]]; then
   echo "nothing to check: no pnpm-lock.yaml under '$SCAN_PATH'"
   exit 0

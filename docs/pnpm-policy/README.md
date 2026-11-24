@@ -10,7 +10,7 @@ request when a pnpm project drops the org's install policy. It reads every
 | Pinned pnpm | `packageManager` is missing, isn't pnpm, or isn't the `pnpm-major` major |
 | Release delay | `minimumReleaseAge` is missing, 0, or not a number of minutes |
 | Trust policy | `trustPolicy` isn't `no-downgrade` |
-| Install scripts | `dangerouslyAllowAllBuilds: true`, or `allowBuilds` has a `'*'` entry |
+| Install scripts | `dangerouslyAllowAllBuilds: true`, `allowBuilds` has a `'*'` entry, or `allowBuilds` isn't a map of package names |
 | Workspace file | `pnpm-workspace.yaml` is missing beside the lockfile |
 | Other lockfiles | with `require-pnpm: true`, any `package-lock.json`, `npm-shrinkwrap.json`, `yarn.lock`, `bun.lock` or `bun.lockb` |
 
@@ -18,7 +18,8 @@ An `onlyBuiltDependencies` key is a warning, not a failure: it is the old
 name for `allowBuilds`.
 
 Exit codes: 0 clean, 1 violations, 2 bad inputs, a missing yq (mikefarah yq
-v4), invalid JSON, or a `pnpm-workspace.yaml` that isn't a mapping.
+v4), invalid JSON, a `pnpm-workspace.yaml` that isn't a mapping, or no
+lockfile when `require-lockfile` is on.
 
 ## Inputs
 
@@ -27,6 +28,7 @@ v4), invalid JSON, or a `pnpm-workspace.yaml` that isn't a mapping.
 | `path` | `.` | Directory to check, relative to the repository root. |
 | `pnpm-major` | `12` | pnpm major version every `packageManager` pin must use. |
 | `require-pnpm` | `false` | Also fail on lockfiles from npm, Yarn or Bun. Turn it on once the repository has moved to pnpm, so an npm lockfile can't come back. |
+| `require-lockfile` | `false` | Fail with exit 2 when `path` has no `pnpm-lock.yaml`. Without it, an empty or mistyped `path` passes with "nothing to check". |
 
 ## Usage
 
@@ -46,6 +48,7 @@ jobs:
     uses: datum-cloud/actions/.github/workflows/pnpm-policy.yaml@v1.30.0
     with:
       require-pnpm: true
+      require-lockfile: true
 ```
 
 A compliant `pnpm-workspace.yaml`:

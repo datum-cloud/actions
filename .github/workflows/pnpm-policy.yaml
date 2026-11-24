@@ -15,6 +15,10 @@ on:
         description: Fail when a package-lock.json, npm-shrinkwrap.json, yarn.lock, bun.lock or bun.lockb is present
         type: boolean
         default: false
+      require-lockfile:
+        description: Fail when `path` has no pnpm-lock.yaml, so a mistyped path can't pass with nothing checked
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,6 +34,7 @@ jobs:
       SCAN_PATH: ${{ inputs.path }}
       PNPM_MAJOR: ${{ inputs.pnpm-major }}
       REQUIRE_PNPM: ${{ inputs.require-pnpm }}
+      REQUIRE_LOCKFILE: ${{ inputs.require-lockfile }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

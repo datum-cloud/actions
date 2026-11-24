@@ -30,7 +30,7 @@ for src in "$script_dir"/testdata/*/; do
 
   status=0
   out=$(
-    unset PNPM_MAJOR REQUIRE_PNPM YQ
+    unset PNPM_MAJOR REQUIRE_PNPM REQUIRE_LOCKFILE YQ
     if [[ -f $src/env ]]; then
       while IFS= read -r line; do
         [[ -z $line ]] || export "${line%%=*}=${line#*=}"
