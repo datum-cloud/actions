@@ -9,7 +9,7 @@ It detects each stack in `path` and runs what it finds:
 
 | Stack | Detected by | Steps |
 |---|---|---|
-| Node | `package.json` plus `package-lock.json`, `pnpm-lock.yaml`, or `bun.lock`/`bun.lockb` | `npm ci`, `pnpm install --frozen-lockfile`, or `bun install --frozen-lockfile`, then the `typecheck`, `lint`, `build` and `test` scripts, each only when `package.json` defines it |
+| Node | `package.json` plus `package-lock.json`, `pnpm-lock.yaml`, or `bun.lock`/`bun.lockb` | `npm ci`, `pnpm install --frozen-lockfile --ignore-scripts`, or `bun install --frozen-lockfile`, then the `typecheck`, `lint`, `build` and `test` scripts, each only when `package.json` defines it |
 | Go | `go.mod` | `go build ./...`, `go test ./...` |
 | Python | `pyproject.toml` plus `poetry.lock` | `poetry install`, then `poetry run pytest` when any `test_*.py` or `*_test.py` file exists |
 | Docker | the `dockerfile` input, `Dockerfile` by default | `docker build`, never pushed |
@@ -19,9 +19,16 @@ When more than one Node lockfile is present, `package-lock.json` wins, then
 job. Finding nothing to build, and no `run` command, also fails the job.
 
 Toolchains come from the project: Node from `.nvmrc` or `.node-version`, pnpm
-from the `packageManager` field (pnpm 10 without one), Go from `go.mod`, and
-Python from `.python-version`. The `node-version` and `python-version` inputs
-apply only when those files are missing.
+from the `packageManager` field, Go from `go.mod`, and Python from
+`.python-version`. The `node-version` and `python-version` inputs apply only
+when those files are missing. A pnpm project without a `packageManager` pin
+fails the job.
+
+For pnpm projects the job caches the pnpm store, keyed on `pnpm-lock.yaml`,
+and installs with `--ignore-scripts`, so no dependency or project install
+script runs in CI. A project that needs one to build or test sets
+`install-scripts: true`. [`pnpm-policy`](../pnpm-policy/) checks the
+project's pnpm settings.
 
 ## Inputs
 
@@ -35,6 +42,7 @@ apply only when those files are missing.
 | `docker-context` | `.` | Docker build context, relative to `path`. |
 | `node-version` | `lts/*` | Node.js version when `path` has no `.nvmrc` or `.node-version`. |
 | `python-version` | `3.12` | Python version when `path` has no `.python-version`. |
+| `install-scripts` | `false` | Run install scripts during `pnpm install`. Turn it on only for a project that needs one to build or test. |
 
 ## Usage
 

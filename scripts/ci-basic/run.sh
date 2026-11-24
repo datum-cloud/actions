@@ -43,7 +43,13 @@ case $stage in
     pm=${NODE_PM:?}
     case $pm in
       npm) npm ci ;;
-      pnpm) pnpm install --frozen-lockfile ;;
+      pnpm)
+        if [[ ${INSTALL_SCRIPTS:-false} == true ]]; then
+          pnpm install --frozen-lockfile
+        else
+          pnpm install --frozen-lockfile --ignore-scripts
+        fi
+        ;;
       bun) bun install --frozen-lockfile ;;
       *) echo "::error title=ci-basic::unsupported package manager '$pm'"; exit 2 ;;
     esac

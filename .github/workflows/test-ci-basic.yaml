@@ -29,6 +29,7 @@ jobs:
         with:
           persist-credentials: false
       - run: shellcheck scripts/ci-basic/*.sh
+      - run: bash scripts/ci-basic/test-detect.sh
 
   node:
     name: Node fixture
@@ -36,6 +37,15 @@ jobs:
     with:
       path: scripts/ci-basic/testdata/node-npm
       skip: lint
+
+  node-pnpm:
+    name: Node fixture (pnpm)
+    uses: ./.github/workflows/ci-basic.yaml
+    with:
+      path: scripts/ci-basic/testdata/node-pnpm
+      # The fixture's own postinstall writes this file; ci-basic installs with
+      # --ignore-scripts, so it must not exist.
+      run: test ! -e postinstall-ran
 
   go:
     name: Go and Docker fixture

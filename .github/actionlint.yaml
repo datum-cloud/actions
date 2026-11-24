@@ -45,3 +45,6 @@ paths:
   .github/workflows/guard-tamper.yaml:
     ignore:
       - 'property "workflow_(repository|sha)" is not defined in object type'
+  .github/workflows/pnpm-policy.yaml:
+    ignore:
+      - 'property "workflow_(repository|sha)" is not defined in object type'
