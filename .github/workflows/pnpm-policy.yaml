@@ -1,0 +1,71 @@
+name: pnpm Policy
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Directory to check, relative to the repository root
+        type: string
+        default: "."
+      pnpm-major:
+        description: pnpm major version every packageManager pin must use
+        type: string
+        default: "12"
+      require-pnpm:
+        description: Fail when a package-lock.json, npm-shrinkwrap.json, yarn.lock, bun.lock or bun.lockb is present
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check pnpm policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      SCAN_PATH: ${{ inputs.path }}
+      PNPM_MAJOR: ${{ inputs.pnpm-major }}
+      REQUIRE_PNPM: ${{ inputs.require-pnpm }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check workflow identity
+        env:
+          WORKFLOW_REPOSITORY: ${{ job.workflow_repository }}
+          WORKFLOW_SHA: ${{ job.workflow_sha }}
+        run: |
+          if [[ -z $WORKFLOW_REPOSITORY || -z $WORKFLOW_SHA ]]; then
+            echo "::error title=pnpm policy::job.workflow_repository or job.workflow_sha is empty; this runner can't identify the workflow's own commit"
+            exit 1
+          fi
+          if [[ -e $GITHUB_WORKSPACE/.pnpm-policy-action ]]; then
+            echo "::error title=pnpm policy::.pnpm-policy-action exists in the repository; it is the check's own checkout path"
+            exit 1
+          fi
+          echo "pnpm policy scripts: $WORKFLOW_REPOSITORY@$WORKFLOW_SHA"
+
+      - name: Checkout check scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .pnpm-policy-action
+          sparse-checkout: |
+            /scripts/pnpm-policy/check.sh
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Move check scripts out of the workspace
+        run: |
+          mv "$GITHUB_WORKSPACE/.pnpm-policy-action" "$RUNNER_TEMP/pnpm-policy-action"
+          echo "SCRIPTS=$RUNNER_TEMP/pnpm-policy-action/scripts/pnpm-policy" >> "$GITHUB_ENV"
+
+      - name: Check pnpm policy
+        run: bash "$SCRIPTS/check.sh"

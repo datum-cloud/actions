@@ -1,0 +1,2 @@
+FAIL ui/package.json: packageManager is 'pnpm@10.34.9'
+2 pnpm lockfiles, 1 violations

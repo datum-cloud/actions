@@ -28,11 +28,10 @@ for f in .nvmrc .node-version; do
 done
 emit node-version-file "$node_version_file"
 
-pnpm_version=""
 if [[ $pm == pnpm ]] && ! jq -e '.packageManager // "" | startswith("pnpm@")' package.json >/dev/null; then
-  pnpm_version=10
+  echo "::error title=ci-basic::package.json has a pnpm lockfile but no packageManager; pin it, such as \"packageManager\": \"pnpm@12.23.0\""
+  exit 2
 fi
-emit pnpm-version "$pnpm_version"
 
 go=false
 [[ -f go.mod ]] && go=true
