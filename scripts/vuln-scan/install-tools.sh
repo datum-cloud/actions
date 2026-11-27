@@ -11,7 +11,7 @@ set -euo pipefail
 # renovate: datasource=go depName=golang.org/x/vuln
 GOVULNCHECK_VERSION=v1.9.0
 # renovate: datasource=github-releases depName=google/osv-scanner
-OSV_SCANNER_VERSION=v2.7.0
+OSV_SCANNER_VERSION=v2.7.1
 # renovate: datasource=github-releases depName=aquasecurity/trivy
 TRIVY_VERSION=v0.75.0
 
