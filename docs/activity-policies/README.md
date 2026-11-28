@@ -219,7 +219,7 @@ vars:
   # Use the milo-os/activity release deployed where these policies run, so CEL
   # and template functions match production, pinned with its digest.
   # renovate: datasource=docker depName=ghcr.io/milo-os/activitytool
-  ACTIVITYTOOL_VERSION: v0.10.1@sha256:9efcfff21f2533919a8a43bb49ab1a6fa2e29edd9cb665e34574428c490389c3
+  ACTIVITYTOOL_VERSION: v0.10.2@sha256:d7fe47a6189f6baa44dcfcddc258887a3051b74d0e009ef121ff60973c1c4234
   ACTIVITY_POLICIES: config/services/activity/policies
   ACTIVITY_POLICY_TESTS: test/activity-policies
 
