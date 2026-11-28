@@ -17,7 +17,7 @@ set -euo pipefail
 # Keep in sync with the Taskfile snippet in docs/activity-policies/README.md;
 # Renovate updates both together (see renovate.json).
 # renovate: datasource=docker depName=ghcr.io/milo-os/activitytool
-PINNED_VERSION=v0.10.1@sha256:9efcfff21f2533919a8a43bb49ab1a6fa2e29edd9cb665e34574428c490389c3
+PINNED_VERSION=v0.10.2@sha256:d7fe47a6189f6baa44dcfcddc258887a3051b74d0e009ef121ff60973c1c4234
 
 ACTIVITYTOOL_VERSION=${ACTIVITYTOOL_VERSION:-$PINNED_VERSION}
 ACTIVITYTOOL_IMAGE=${ACTIVITYTOOL_IMAGE:-ghcr.io/milo-os/activitytool}
