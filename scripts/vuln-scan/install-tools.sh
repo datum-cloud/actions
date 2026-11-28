@@ -9,11 +9,11 @@
 set -euo pipefail
 
 # renovate: datasource=go depName=golang.org/x/vuln
-GOVULNCHECK_VERSION=v1.9.0
+GOVULNCHECK_VERSION=v1.10.0
 # renovate: datasource=github-releases depName=google/osv-scanner
 OSV_SCANNER_VERSION=v2.7.1
 # renovate: datasource=github-releases depName=aquasecurity/trivy
-TRIVY_VERSION=v0.75.0
+TRIVY_VERSION=v0.76.2
 
 BIN_DIR=${BIN_DIR:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/vuln-scan-bin}
 CACHE_DIR=${CACHE_DIR:-}
